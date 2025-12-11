@@ -6,127 +6,56 @@ import io
 import zipfile
 import random
 
-# ================= 🎨 1. COPILOT DESIGN TOKENS =================
-# 基于 Copilot Consumer Design System 提取的变量
+# ================= 🎨 1. DESIGN TOKENS (Copilot Style) =================
 MY_DESIGN_TOKENS = {
-    # 核心色彩
-    "bg_color": "#FFF6F0",            # Oat 100 (Primary Background)
-    "surface_color": "rgba(255, 255, 255, 0.60)", # Soft, translucent white
-    "surface_active": "#FFFFFF",      # Active/Focus surface
-    
-    # 文本色彩
-    "text_primary": "#311F10",        # Dark Oat (Primary Text)
-    "text_secondary": "#594134",      # Secondary Text
-    "accent_color": "#311F10",        # 使用 Dark Oat 作为主交互色，保持 Grounded
-    
-    # 几何与阴影
-    "radius_card": "40px",            # Large radius for cards
-    "radius_pill": "999px",           # Pill radius for buttons/chips
-    "shadow_tinted": "0 8px 24px -4px rgba(210, 150, 120, 0.20), 0 4px 8px -2px rgba(210, 150, 120, 0.15)", # Tinted Shadow
-    
-    # 字体
-    "font_family": "'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" # 近似 Ginto 的几何无衬线体
+    "bg_color": "#FFF6F0",            # Oat 100
+    "surface_color": "rgba(255, 255, 255, 0.60)", 
+    "text_primary": "#311F10",        # Dark Oat
+    "text_secondary": "#594134",
+    "accent_color": "#311F10",
+    "radius_card": "40px",
+    "radius_pill": "999px",
+    "shadow_tinted": "0 8px 24px -4px rgba(210, 150, 120, 0.20), 0 4px 8px -2px rgba(210, 150, 120, 0.15)",
+    "font_family": "'Segoe UI', sans-serif"
 }
 
-# ================= 2. CSS 注入引擎 (Copilot Style) =================
 def inject_copilot_css(tokens):
     css = f"""
     <style>
-        /* === 全局重置 === */
-        .stApp {{
-            background-color: {tokens['bg_color']};
-            font-family: {tokens['font_family']};
-            color: {tokens['text_primary']};
-        }}
-        
-        /* 隐藏 Streamlit 默认头部，沉浸式体验 */
+        .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
         header {{visibility: hidden;}}
         .block-container {{padding-top: 3rem; padding-bottom: 5rem; max-width: 1200px;}}
-
-        /* === 排版系统 === */
-        h1, h2, h3 {{
-            color: {tokens['text_primary']} !important;
-            font-weight: 600 !important;
-            letter-spacing: -0.02em !important; /* Display tight spacing */
-        }}
-        p, label, .stMarkdown {{
-            color: {tokens['text_secondary']} !important;
-            line-height: 1.6 !important; /* Calm reading rhythm */
-        }}
-
-        /* === Copilot 卡片风格 === */
-        /* 定制 Streamlit 的 container 为大圆角卡片 */
+        h1, h2, h3 {{ color: {tokens['text_primary']} !important; font-weight: 600 !important; letter-spacing: -0.02em !important; }}
+        
+        /* 卡片风格 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
             padding: 2rem;
             box-shadow: {tokens['shadow_tinted']};
             border: 1px solid rgba(255,255,255,0.4);
-            backdrop-filter: blur(10px); /* 磨砂玻璃质感 */
         }}
-
-        /* === 输入框美化 (Composer Style) === */
-        .stTextArea textarea, .stTextInput input, .stNumberInput input {{
+        
+        /* 输入框 & Code Block 美化 */
+        .stTextArea textarea, .stTextInput input {{
             background-color: #FFFFFF !important;
+            border-radius: 16px !important;
             border: 1px solid transparent !important;
-            border-radius: 24px !important; /* 较大的圆角 */
-            color: {tokens['text_primary']} !important;
-            padding: 1rem !important;
             box-shadow: 0 2px 6px rgba(210, 150, 120, 0.05) !important;
-            transition: all 0.3s ease;
         }}
-        .stTextArea textarea:focus, .stTextInput input:focus {{
-            box-shadow: 0 4px 12px rgba(210, 150, 120, 0.15) !important;
-            transform: translateY(-1px);
-        }}
-
-        /* === 按钮美化 (Pill Shape) === */
-        .stButton button {{
-            border-radius: {tokens['radius_pill']} !important;
-            font-weight: 600 !important;
-            border: none !important;
-            padding: 0.6rem 1.5rem !important;
-            transition: all 0.2s ease !important;
-        }}
+        .stCode {{ border-radius: 12px !important; }}
         
-        /* Primary Button (Dark Oat) */
-        div[data-testid="stButton"] > button[kind="primary"] {{
-            background-color: {tokens['accent_color']} !important;
-            color: #FFFFFF !important;
-            box-shadow: 0 4px 12px rgba(49, 31, 16, 0.2);
-        }}
-        div[data-testid="stButton"] > button[kind="primary"]:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(49, 31, 16, 0.3);
-        }}
-
-        /* Secondary Button (Soft Outline) */
-        div[data-testid="stButton"] > button[kind="secondary"] {{
-            background-color: transparent !important;
-            border: 1px solid rgba(89, 65, 52, 0.2) !important;
-            color: {tokens['text_secondary']} !important;
-        }}
-        div[data-testid="stButton"] > button[kind="secondary"]:hover {{
-            background-color: rgba(255, 246, 240, 0.8) !important;
-            border-color: {tokens['text_primary']} !important;
-            color: {tokens['text_primary']} !important;
-        }}
-
-        /* === 进度条颜色 (Tinted Warmth) === */
-        .stProgress > div > div > div > div {{
-            background-color: {tokens['text_primary']};
-        }}
+        /* 按钮 */
+        .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; border: none !important; }}
+        div[data-testid="stButton"] > button[kind="primary"] {{ background-color: {tokens['accent_color']} !important; color: #FFFFFF !important; }}
+        div[data-testid="stButton"] > button[kind="secondary"] {{ border: 1px solid rgba(89, 65, 52, 0.2) !important; background: transparent !important; }}
         
-        /* === 图片圆角 === */
-        img {{
-            border-radius: 32px !important; 
-        }}
-
+        img {{ border-radius: 32px !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ================= 3. 数据与逻辑 =================
+# ================= 2. DATA & LOGIC =================
 REMIX_MASTER_LIST = [
     {"label": "Want a wider view?", "prompt": "Create an expanded image with extended space."},
     {"label": "Want to zoom in?", "prompt": "Create a micro-detail close-up variant of this image."},
@@ -193,44 +122,31 @@ def create_final_zip(processed_jsons, image_storage):
 def get_random_remix():
     return random.choice(REMIX_MASTER_LIST)
 
-# ================= 4. 主程序 =================
-
-st.set_page_config(page_title="Copilot Design Studio", layout="wide", page_icon="🧶")
+# ================= 3. MAIN APP =================
+st.set_page_config(page_title="Copilot Workflow", layout="wide", page_icon="🧶")
 inject_copilot_css(MY_DESIGN_TOKENS)
 
-# Init Session
 if 'data' not in st.session_state: st.session_state.data = []
 if 'images' not in st.session_state: st.session_state.images = {}
 if 'processed_results' not in st.session_state: st.session_state.processed_results = {}
 if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
 
-# --- Phase 1: Upload (Hero-first Layout) ---
+# --- Phase 1: Upload ---
 if not st.session_state.data:
-    # 居中布局，营造“Calm center zone”
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown(f"""
-        <div style='text-align: center; margin-bottom: 32px;'>
-            <h1 style='font-size: 3rem;'>Let’s create together.</h1>
-            <p style='font-size: 1.2rem; color: {MY_DESIGN_TOKENS['text_secondary']};'>
-                Upload your PPT to start the prompt engineering workflow.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.container(border=True): # Copilot Card Style
-            st.markdown("### 📂 New Project")
+        st.markdown(f"<div style='text-align: center; margin-bottom: 30px;'><h1>Design Validation Workflow</h1><p style='color:#594134'>Upload, Remix, Verify.</p></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("### 📂 Project Setup")
             uploaded_ppt = st.file_uploader("Upload PPTX", type=["pptx"])
-            st.markdown("<br>", unsafe_allow_html=True)
             col_in1, col_in2 = st.columns([2, 1])
             with col_in2:
                 start_id = st.number_input("Start ID", value=453, step=1)
-            
             st.markdown("<br>", unsafe_allow_html=True)
             if uploaded_ppt:
                 if st.button("Start Workflow", type="primary", use_container_width=True):
-                    with st.spinner("Analyzing content..."):
+                    with st.spinner("Processing..."):
                         try:
                             data, images = process_ppt_file(uploaded_ppt, start_id)
                             st.session_state.data = data
@@ -240,82 +156,98 @@ if not st.session_state.data:
                         except Exception as e:
                             st.error(f"Error: {e}")
 
-# --- Phase 2: Editor (Content Detail Page) ---
+# --- Phase 2: Editor (Validation Mode) ---
 else:
-    # 侧边栏：Settings / Profile Page style
     with st.sidebar:
         st.markdown("### Progress")
         total = len(st.session_state.data)
         done = len(st.session_state.processed_results)
         st.progress(done / total if total > 0 else 0)
-        st.caption(f"Completed: {done} / {total}")
-        
+        st.caption(f"Done: {done} / {total}")
         st.markdown("---")
         if done > 0:
             zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
             st.download_button("Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
-        else:
-            st.info("Process one image to export.")
-            
         st.markdown("---")
         if st.button("Reset Project", type="secondary"):
             st.session_state.clear()
             st.rerun()
 
-    # 主界面
+    # Data Setup
     current_item = st.session_state.data[st.session_state.current_idx]
     current_id = current_item['id']
     img_name = current_item['image_filename']
 
-    # 顶部标题 (Ginto Nord style - Display Strong)
-    st.markdown(f"## Editor <span style='font-weight: 400; color: #594134; font-size: 0.8em; margin-left: 12px;'>ID {current_id}</span>", unsafe_allow_html=True)
+    st.markdown(f"## Validation Desk <span style='font-weight:400; font-size:0.8em; color:#594134; margin-left:10px;'>ID {current_id}</span>", unsafe_allow_html=True)
 
     col_L, col_R = st.columns([1, 1.4])
-
+    
     with col_L:
-        # 左侧图片区
         with st.container(border=True):
             if img_name in st.session_state.images:
                 st.image(st.session_state.images[img_name], use_container_width=True)
             else:
-                st.error("Image missing")
-
+                st.error("Missing Image")
+                
     with col_R:
-        # 右侧编辑区 - Composer Style
+        # 1. Main Prompt
         st.markdown("**Main Prompt**")
         default_text = current_item['original_prompt_text']
         if not default_text.strip().lower().startswith("create"):
             default_text = "Create an image of " + default_text
-        main_prompt = st.text_area("main_prompt", value=default_text, height=120, key=f"m_{current_id}", label_visibility="collapsed")
+        main_prompt = st.text_area("main", value=default_text, height=100, key=f"m_{current_id}", label_visibility="collapsed")
         
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("**Remix Suggestions**")
-
+        
+        # 2. Remix & Verify Section
+        st.markdown("**Remix & Verify** (Copy code -> Paste in Copilot -> Verify)")
+        
         session_key = f"remix_{current_id}"
         if session_key not in st.session_state:
             st.session_state[session_key] = random.sample(REMIX_MASTER_LIST, 3)
+            st.session_state[f"verified_{current_id}"] = [False, False, False] # Track verification status
+            
         current_remixes = st.session_state[session_key]
+        verified_status = st.session_state.get(f"verified_{current_id}", [False, False, False])
 
-        # Suggestion Chips / Cards
         for i in range(3):
             with st.container(border=True):
-                c_txt, c_act = st.columns([6, 1])
-                with c_txt:
-                    # 使用 placeholder 保持界面极简 (Minimal Layout)
-                    l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed")
-                    p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=60, key=f"p_{current_id}_{i}", label_visibility="collapsed")
-                    current_remixes[i]['label'] = l_val
-                    current_remixes[i]['prompt'] = p_val
-                with c_act:
+                # Header with Status
+                c_head1, c_head2 = st.columns([4, 1])
+                with c_head1:
+                     l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed")
+                with c_head2:
+                    # Verification Checkbox
+                    is_checked = st.checkbox("✅ Valid", value=verified_status[i], key=f"chk_{current_id}_{i}")
+                    verified_status[i] = is_checked
+                
+                # Prompt & Copy Area
+                p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=60, key=f"p_{current_id}_{i}", label_visibility="collapsed")
+                current_remixes[i]['label'] = l_val
+                current_remixes[i]['prompt'] = p_val
+                
+                # Actions: Copy Code & Swap
+                c_act1, c_act2 = st.columns([5, 1])
+                with c_act1:
+                    # Show easy-to-copy code block
+                    st.code(p_val, language="text")
+                    st.markdown(f"<a href='https://copilot.microsoft.com/' target='_blank' style='text-decoration:none; color:#311F10; font-size:0.8em;'>↗️ Open Copilot to Test</a>", unsafe_allow_html=True)
+                with c_act2:
                     st.write("")
-                    # Secondary style button
-                    if st.button("🎲", key=f"b_{current_id}_{i}", help="Swap", type="secondary"):
+                    if st.button("🎲", key=f"b_{current_id}_{i}", help="Swap new prompt", type="secondary"):
                         st.session_state[session_key][i] = get_random_remix()
+                        verified_status[i] = False # Reset verification on swap
+                        st.session_state[f"verified_{current_id}"] = verified_status
                         st.rerun()
-        
+
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Save & Next", type="primary", use_container_width=True):
-            final_json = { "id": current_id, "prompt": main_prompt, "remixSuggestions": current_remixes }
+        if st.button("💾 Save Verified & Next", type="primary", use_container_width=True):
+            final_json = { 
+                "id": current_id, 
+                "prompt": main_prompt, 
+                "remixSuggestions": current_remixes,
+                "verificationStatus": verified_status # Also saving if you checked them!
+            }
             st.session_state.processed_results[f"{current_id}.json"] = final_json
             if st.session_state.current_idx < len(st.session_state.data) - 1:
                 st.session_state.current_idx += 1
