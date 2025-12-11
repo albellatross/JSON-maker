@@ -10,7 +10,7 @@ import urllib.parse
 # ================= 🎨 1. DESIGN TOKENS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0",            
-    "surface_color": "rgba(255, 255, 255, 0.85)", 
+    "surface_color": "rgba(255, 255, 255, 0.90)", 
     "text_primary": "#311F10",        
     "text_secondary": "#594134",
     "accent_color": "#311F10",
@@ -24,11 +24,21 @@ def inject_copilot_css(tokens):
     css = f"""
     <style>
         .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
-        header {{visibility: hidden;}}
+        header {{visibility: hidden;}} /* 隐藏 Streamlit 默认汉堡菜单 */
         .block-container {{padding-top: 2rem; padding-bottom: 5rem; max-width: 1000px;}}
         
         h1, h2, h3 {{ color: {tokens['text_primary']} !important; font-weight: 600 !important; }}
         
+        /* 顶部控制条样式 */
+        .control-bar {{
+            background-color: rgba(255,255,255,0.6);
+            border-radius: 16px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255,255,255,0.8);
+        }}
+
+        /* 卡片样式 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
@@ -53,7 +63,7 @@ def inject_copilot_css(tokens):
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ================= 2. DATA: NEW ELEMENT-LEVEL LISTS =================
+# ================= 2. DATA LISTS =================
 
 # 🇬🇧 English List (Element Modifications)
 REMIX_LIST_EN = [
@@ -93,16 +103,8 @@ REMIX_LIST_ZH = [
     {"label": "调整灯光", "prompt": "创作这张图片，使用戏剧性的聚光灯仅聚焦于中心物体。"}
 ]
 
-# 🔥 更新后的 Copilot 指令 (User Provided)
-COPILOT_GEN_INSTRUCTION = """A remix prompt consists of a short, 2–5-word title and an instruction that begins with “Create this picture with…” or “Create this picture by replacing…”, focusing on element-level modifications rather than stylistic changes.
-
-The title should concisely summarize the modification direction (e.g., Replace Object, Add Light Effects, Switch to Seasonal Props).
-The prompt should be one clear, professional sentence that performs a specific element change in the original picture—such as replacing an object, adding a prop, adjusting lighting on a specific element, or modifying text—while keeping the original art style, mood, composition, and character features fully preserved.
-
-Each prompt should describe 1–2 concrete element modifications, with optional clarity descriptors (e.g., material, scale, position), but must not introduce new stylistic transformations.
-The remix may include slight creative enhancements as long as the result remains visually consistent with the original image and clearly derived from it.
-
-After understanding this structure, please write 5 remix prompts for me based on the uploaded image (each including a modification title + a “Create this picture with/by…” instruction), all targeting different element-level changes.
+COPILOT_GEN_INSTRUCTION = """A remix prompt consists of a short, 2–5-word title and an instruction.
+Please write 5 remix prompts for me based on the uploaded image.
 Format:
 Label: [Title]
 Prompt: [Instruction]"""
@@ -149,7 +151,7 @@ def create_final_zip(processed_jsons, image_storage):
     return zip_buffer
 
 # ================= 3. MAIN UI =================
-st.set_page_config(page_title="Element Editor", layout="wide", page_icon="🧩")
+st.set_page_config(page_title="Studio", layout="wide", page_icon="🧩")
 inject_copilot_css(MY_DESIGN_TOKENS)
 
 # Session Setup
@@ -163,7 +165,7 @@ if not st.session_state.data:
     st.markdown("<br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown(f"<div style='text-align: center;'><h1>🧩 Element Editor Studio</h1><p style='color:#594134'>Element-level Modifications Workflow</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><h1>🧩 Element Editor</h1><p style='color:#594134'>Clean Workflow</p></div>", unsafe_allow_html=True)
         with st.container(border=True):
             uploaded_ppt = st.file_uploader("Upload PPTX", type=["pptx"])
             start_id = st.number_input("Start ID", value=453, step=1)
@@ -180,41 +182,47 @@ if not st.session_state.data:
                         except Exception as e:
                             st.error(f"Error: {e}")
 
-# --- Phase 2: Editor ---
+# --- Phase 2: Editor (No Sidebar) ---
 else:
-    with st.sidebar:
-        st.markdown("### Settings")
-        lang_mode = st.radio("Prompt Language / 语言", ["English", "Chinese/中文"], index=0)
-        
-        st.markdown("---")
-        st.markdown("### Progress")
-        total = len(st.session_state.data)
-        done = len(st.session_state.processed_results)
-        st.progress(done / total if total > 0 else 0)
-        st.caption(f"Done: {done} / {total}")
-        
-        if done > 0:
-            zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
-            st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary")
-        
-        st.markdown("---")
-        if st.button("Reset Project", type="secondary"):
-            st.session_state.clear()
-            st.rerun()
-
     item = st.session_state.data[st.session_state.current_idx]
     current_id = item['id']
     img_name = item['image_filename']
 
-    # Header
+    # === 顶部控制栏 (Top Control Bar) ===
+    # 将原来的侧边栏功能移到这里
+    with st.container(border=True):
+        c_prog, c_lang, c_dl = st.columns([2, 1, 1])
+        
+        # 1. 进度条
+        with c_prog:
+            total = len(st.session_state.data)
+            done = len(st.session_state.processed_results)
+            st.progress(done / total if total > 0 else 0)
+            st.caption(f"Progress: {done} / {total}")
+        
+        # 2. 语言切换 (水平显示)
+        with c_lang:
+            lang_mode = st.radio("Language", ["English", "Chinese/中文"], index=0, horizontal=True, label_visibility="collapsed")
+            st.caption(f"Mode: {lang_mode}")
+
+        # 3. 下载按钮
+        with c_dl:
+            if done > 0:
+                zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
+                st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
+            else:
+                st.button("⬇️ Waiting...", disabled=True, use_container_width=True)
+
+    # 标题栏 + 顶部保存
     col_h1, col_h2 = st.columns([3, 1])
     with col_h1:
         st.markdown(f"## ID {current_id} <span style='font-size:0.6em; color:#888'>Editor</span>", unsafe_allow_html=True)
     with col_h2:
         if st.button("💾 Save & Next", type="primary", use_container_width=True, key="save_top"):
+            # 保存逻辑在底部统一处理，这里仅触发刷新
             pass 
 
-    # === Top: Image ===
+    # === SECTION 1: Top Image ===
     with st.container(border=True):
         if img_name in st.session_state.images:
             st.image(st.session_state.images[img_name], use_container_width=True)
@@ -223,7 +231,7 @@ else:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === Middle: Main Prompt ===
+    # === SECTION 2: Main Prompt ===
     st.markdown("#### 📝 Main Prompt")
     default_text = item['original_prompt_text']
     if not default_text.strip().lower().startswith("create"):
@@ -232,19 +240,18 @@ else:
     
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === Bottom: Element Remix Suggestions ===
+    # === SECTION 3: Element Remix Suggestions ===
     st.markdown(f"#### 🧩 Element Modifications ({lang_mode})")
     
     session_key = f"remix_{current_id}"
+    # 初始化
     if session_key not in st.session_state:
         st.session_state[session_key] = [get_random_remix(lang_mode) for _ in range(3)]
         
     current_remixes = st.session_state[session_key]
 
-    # Instruction Expander
-    with st.expander("📋 Show Copilot Instruction (Copy & Paste)"):
+    with st.expander("📋 Show Copilot Instruction"):
         st.code(COPILOT_GEN_INSTRUCTION, language="text")
-        st.caption("Instructions updated to focus on element-level changes.")
 
     # Grid Layout
     r_col1, r_col2, r_col3 = st.columns(3)
@@ -253,18 +260,26 @@ else:
     for i in range(3):
         with cols[i]:
             with st.container(border=True):
+                # 标题 + 随机按钮
                 c_title, c_btn = st.columns([4, 1])
                 with c_title:
                     l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed", placeholder="Label")
                 with c_btn:
-                    if st.button("🎲", key=f"rnd_{current_id}_{i}", help=f"Randomize in {lang_mode}"):
-                        st.session_state[session_key][i] = get_random_remix(lang_mode)
-                        st.rerun()
+                    # 🔥 修复随机功能：使用 key 确保唯一性，并在回调中更新状态
+                    if st.button("🎲", key=f"rnd_{current_id}_{i}", help=f"Randomize this card in {lang_mode}"):
+                        # 立即从当前选择的语言列表中随机抽取一个新的
+                        new_remix = get_random_remix(lang_mode)
+                        st.session_state[session_key][i] = new_remix
+                        st.rerun() # 强制刷新页面以显示新内容
 
                 p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=120, key=f"p_{current_id}_{i}", label_visibility="collapsed", placeholder="Prompt")
+                
+                # 确保 text_area 的修改能回写到 session_state
+                # 注意：Streamlit 的 text_area 会自动更新绑定的 key，但我们需要手动同步回 current_remixes 列表
                 current_remixes[i]['label'] = l_val
                 current_remixes[i]['prompt'] = p_val
                 
+                # 验证按钮
                 if st.button(f"🎨 Verify", key=f"v_{current_id}_{i}", use_container_width=True):
                     clean_prompt = urllib.parse.quote(p_val)
                     seed = random.randint(0, 9999)
@@ -276,6 +291,7 @@ else:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # 底部保存逻辑
     if st.button("💾 Save & Next", type="primary", use_container_width=True, key="save_bottom"):
         final_json = { 
             "id": current_id, 
