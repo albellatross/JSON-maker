@@ -6,7 +6,7 @@ import io
 import zipfile
 import random
 
-# ================= 配置区：你的 Remix Master List =================
+# ================= 配置区 =================
 REMIX_MASTER_LIST = [
     {"label": "Want a wider view?", "prompt": "Create an expanded image with extended space."},
     {"label": "Want to zoom in?", "prompt": "Create a micro-detail close-up variant of this image."},
@@ -35,42 +35,29 @@ REMIX_MASTER_LIST = [
     {"label": "Make this crystal?", "prompt": "Remake this image to be in an iridescent fantasy realm with the subject as translucent glass or crystal, glowing and refracted."}
 ]
 
-# ================= 核心逻辑：PPT处理与打包 =================
+# ================= 逻辑函数 =================
 
 def process_ppt_file(uploaded_file, start_id):
-    """直接在内存中处理PPT，不保存到硬盘"""
     prs = Presentation(uploaded_file)
     current_id = int(start_id)
-    
-    extracted_data = [] # 存放元数据
-    image_storage = {}  # 存放图片二进制数据 { "453.png": bytes }
+    extracted_data = []
+    image_storage = {}
 
     for index, slide in enumerate(prs.slides):
-        slide_info = {
-            "id": str(current_id),
-            "original_prompt_text": "",
-            "image_filename": ""
-        }
-        
+        slide_info = {"id": str(current_id), "original_prompt_text": "", "image_filename": ""}
         found_image = False
         
-        # 遍历形状
         for shape in slide.shapes:
-            # A. 提取图片
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                if not found_image: # 每页只取第一张图
-                    image_filename = f"{current_id}.png"
-                    # 将图片保存在内存字典里
-                    image_storage[image_filename] = shape.image.blob
-                    slide_info["image_filename"] = image_filename
-                    found_image = True
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and not found_image:
+                image_filename = f"{current_id}.png"
+                image_storage[image_filename] = shape.image.blob
+                slide_info["image_filename"] = image_filename
+                found_image = True
             
-            # B. 提取文本
             if shape.has_text_frame:
                 text = shape.text.strip()
-                if len(text) > 10:
-                    if len(text) > len(slide_info["original_prompt_text"]):
-                        slide_info["original_prompt_text"] = text
+                if len(text) > 10 and len(text) > len(slide_info["original_prompt_text"]):
+                    slide_info["original_prompt_text"] = text
         
         if found_image:
             extracted_data.append(slide_info)
@@ -79,157 +66,186 @@ def process_ppt_file(uploaded_file, start_id):
     return extracted_data, image_storage
 
 def create_final_zip(processed_jsons, image_storage):
-    """打包所有 JSON 和 重命名后的图片"""
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        # 1. 写入生成的 JSON 文件
         for filename, json_data in processed_jsons.items():
             json_str = json.dumps(json_data, indent=4, ensure_ascii=False)
             zip_file.writestr(f"jsons/{filename}", json_str)
-            
-        # 2. 写入对应的图片文件 (从内存写入Zip)
-        # 只写入已经处理过（生成了JSON）的图片，节省体积
         for json_filename, json_data in processed_jsons.items():
             img_name = f"{json_data['id']}.png"
             if img_name in image_storage:
                 zip_file.writestr(f"images/{img_name}", image_storage[img_name])
-                
     return zip_buffer
 
 def get_random_remix():
     return random.choice(REMIX_MASTER_LIST)
 
-# ================= 网页 UI 部分 =================
+# ================= 🎨 UI 设置与 CSS 美化 =================
 
-st.set_page_config(page_title="One-Stop AI Tool", layout="wide", page_icon="⚡️")
+st.set_page_config(page_title="AI Dataset Studio", layout="wide", page_icon="✨")
 
+# 注入自定义CSS，让界面更像一个专业软件
 st.markdown("""
 <style>
-    .stTextArea textarea { font-size: 14px; }
-    .stButton button { width: 100%; border-radius: 8px; }
-    .css-1v0mbdj.etr89bj1 { display: block; } 
+    /* 调整顶部留白 */
+    .block-container { padding-top: 2rem; padding-bottom: 5rem; }
+    
+    /* 优化文本域样式 */
+    .stTextArea textarea { 
+        font-family: 'Inter', sans-serif;
+        font-size: 15px; 
+        line-height: 1.5;
+        border-radius: 8px;
+    }
+    
+    /* 卡片容器样式 */
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+        background-color: #f8f9fa; /* 浅灰底色 */
+        padding: 1rem;
+        border-radius: 10px;
+    }
+
+    /* 按钮美化 */
+    .stButton button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    /* 侧边栏样式微调 */
+    section[data-testid="stSidebar"] {
+        background-color: #f0f2f6;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡️ PPT 转 AI 数据集 - 全能工作台")
-
 # 初始化 Session State
-if 'data' not in st.session_state:
-    st.session_state.data = []         # PPT提取出的原始列表
-if 'images' not in st.session_state:
-    st.session_state.images = {}       # 图片二进制数据
-if 'processed_results' not in st.session_state:
-    st.session_state.processed_results = {} # 最终做好的JSON
-if 'current_idx' not in st.session_state:
-    st.session_state.current_idx = 0   # 当前做到第几张
+if 'data' not in st.session_state: st.session_state.data = []
+if 'images' not in st.session_state: st.session_state.images = {}
+if 'processed_results' not in st.session_state: st.session_state.processed_results = {}
+if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
 
-# ---------------------------------------------------------
-# 阶段 1: 如果没有数据，显示上传界面
-# ---------------------------------------------------------
+# ================= 🚀 阶段 1: 欢迎页 / 上传页 =================
 if not st.session_state.data:
-    st.info("👋 欢迎！请直接上传你的 PPT 文件，我来帮你处理一切。")
-    
-    col_u1, col_u2 = st.columns([2, 1])
-    with col_u1:
-        uploaded_ppt = st.file_uploader("拖入 PPTX 文件", type=["pptx"])
-    with col_u2:
-        start_id = st.number_input("起始序号 (ID)", value=453, step=1)
-    
-    if uploaded_ppt:
-        if st.button("🚀 开始提取素材", type="primary"):
-            with st.spinner("正在拆解 PPT，提取图片和文字..."):
-                try:
-                    data, images = process_ppt_file(uploaded_ppt, start_id)
-                    st.session_state.data = data
-                    st.session_state.images = images
-                    st.session_state.current_idx = 0
-                    st.rerun() # 刷新页面进入阶段 2
-                except Exception as e:
-                    st.error(f"处理出错: {e}")
+    st.markdown("<h1 style='text-align: center;'>✨ AI Dataset Studio</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: grey;'>将你的 PPT 一键转化为高质量 AI 训练数据集</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
-# ---------------------------------------------------------
-# 阶段 2: 编辑与导出界面
-# ---------------------------------------------------------
+    col_u1, col_u2, col_u3 = st.columns([1, 2, 1])
+    with col_u2:
+        with st.container(border=True):
+            st.subheader("📂 开始工作")
+            uploaded_ppt = st.file_uploader("拖入 PPTX 文件", type=["pptx"], label_visibility="collapsed")
+            start_id = st.number_input("设置起始 ID (Start ID)", value=453, step=1)
+            
+            if uploaded_ppt:
+                if st.button("🚀 启动提取引擎", type="primary", use_container_width=True):
+                    with st.spinner("正在逐页解析 PPT，提取高清图片与文本..."):
+                        try:
+                            data, images = process_ppt_file(uploaded_ppt, start_id)
+                            st.session_state.data = data
+                            st.session_state.images = images
+                            st.session_state.current_idx = 0
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"解析失败: {e}")
+
+# ================= 🛠️ 阶段 2: 编辑工作台 =================
 else:
-    # 侧边栏：状态与导出
+    # --- 侧边栏：状态面板 ---
     with st.sidebar:
-        st.header("📦 导出中心")
+        st.header("📊 工作进度")
         total = len(st.session_state.data)
         done = len(st.session_state.processed_results)
         
-        st.write(f"进度: {done} / {total}")
+        # 进度条
         st.progress(done / total if total > 0 else 0)
+        st.caption(f"已完成: {done} / {total}")
         
+        st.divider()
+        st.subheader("📦 导出")
         if done > 0:
-            st.success("已准备好下载")
             zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
             st.download_button(
-                label="⬇️ 下载最终 ZIP 包 (图+JSON)",
+                label="⬇️ 下载数据集 (ZIP)",
                 data=zip_buffer.getvalue(),
                 file_name="ai_dataset_pack.zip",
                 mime="application/zip",
-                type="primary"
+                type="primary",
+                use_container_width=True
             )
+        else:
+            st.info("处理完第一张图后即可下载。")
         
         st.divider()
-        if st.button("🔄 重置/上传新文件"):
+        if st.button("🔄 重置所有数据", type="secondary"):
             st.session_state.clear()
             st.rerun()
 
-    # 主编辑区
+    # --- 主操作区 ---
     current_item = st.session_state.data[st.session_state.current_idx]
     current_id = current_item['id']
     img_name = current_item['image_filename']
     
+    # 顶部导航
+    c_nav1, c_nav2 = st.columns([3, 1])
+    with c_nav1:
+        st.subheader(f"🖼️ 编辑中: ID {current_id}")
+    with c_nav2:
+        st.caption(f"文件名: {img_name}")
+
     col_left, col_right = st.columns([1, 1.3])
     
-    # 左侧：看图
+    # === 左侧：图片预览 ===
     with col_left:
-        if img_name in st.session_state.images:
-            st.image(st.session_state.images[img_name], caption=f"ID: {current_id}", use_container_width=True)
-        else:
-            st.error("图片丢失")
+        # 使用 Container 给图片加个框
+        with st.container(border=True):
+            if img_name in st.session_state.images:
+                st.image(st.session_state.images[img_name], use_container_width=True)
+            else:
+                st.error("图片数据丢失")
 
-    # 右侧：编辑
+    # === 右侧：编辑表单 ===
     with col_right:
-        st.subheader(f"编辑 ID: {current_id}")
-        
-        # 1. 主 Prompt 自动补全
+        # 1. 主 Prompt (使用 Expander 保持整洁，或者直接展示)
+        st.markdown("##### 📝 主指令 (Main Prompt)")
         default_text = current_item['original_prompt_text']
         if not default_text.strip().lower().startswith("create"):
             default_text = "Create an image of " + default_text
             
-        main_prompt = st.text_area("Main Prompt", value=default_text, height=100, key=f"main_{current_id}")
+        main_prompt = st.text_area("main_prompt", value=default_text, height=120, key=f"main_{current_id}", label_visibility="collapsed")
         
         st.markdown("---")
-        st.write("**Remix 建议 (点击 🎲 随机更换)**")
+        st.markdown("##### 🎨 风格变奏 (Remix Suggestions)")
         
-        # 2. Remix 抽卡逻辑
+        # 2. Remix 区域 (卡片化设计)
         session_key = f"remix_{current_id}"
         if session_key not in st.session_state:
             st.session_state[session_key] = random.sample(REMIX_MASTER_LIST, 3)
-        
         current_remixes = st.session_state[session_key]
         
-        # 3 个卡片
+        # 遍历 3 个建议，每个放进一个带边框的容器
         for i in range(3):
-            c1, c2 = st.columns([6, 1])
-            with c1:
-                # 紧凑布局
-                l_val = st.text_input(f"Label {i+1}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed", placeholder="Label")
-                p_val = st.text_area(f"Prompt {i+1}", value=current_remixes[i]['prompt'], height=60, key=f"p_{current_id}_{i}", label_visibility="collapsed", placeholder="Prompt")
-                # 更新
-                current_remixes[i]['label'] = l_val
-                current_remixes[i]['prompt'] = p_val
-            with c2:
-                if st.button("🎲", key=f"btn_{current_id}_{i}"):
-                    st.session_state[session_key][i] = get_random_remix()
-                    st.rerun()
-            st.write("") # 间隔
+            with st.container(border=True):
+                c_text, c_btn = st.columns([5, 1])
+                with c_text:
+                    # 使用 text_input 的 label 直接作为标题，减少 label 占用
+                    l_val = st.text_input(f"Label {i+1}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed", placeholder="输入风格标题...")
+                    p_val = st.text_area(f"Prompt {i+1}", value=current_remixes[i]['prompt'], height=70, key=f"p_{current_id}_{i}", label_visibility="collapsed", placeholder="输入具体指令...")
+                    # 更新数据
+                    current_remixes[i]['label'] = l_val
+                    current_remixes[i]['prompt'] = p_val
+                with c_btn:
+                    st.write("") 
+                    st.write("") 
+                    # 图标按钮
+                    if st.button("🎲", key=f"btn_{current_id}_{i}", help="随机换一个风格"):
+                        st.session_state[session_key][i] = get_random_remix()
+                        st.rerun()
 
-        # 底部保存
-        if st.button("💾 保存并下一张", type="primary"):
-            # 保存到 session
+        # 底部大按钮
+        st.markdown("")
+        if st.button("💾 保存当前并继续 (Next)", type="primary", use_container_width=True):
             final_json = {
                 "id": current_id,
                 "prompt": main_prompt,
@@ -237,10 +253,9 @@ else:
             }
             st.session_state.processed_results[f"{current_id}.json"] = final_json
             
-            # 自动跳页
             if st.session_state.current_idx < len(st.session_state.data) - 1:
                 st.session_state.current_idx += 1
                 st.rerun()
             else:
                 st.balloons()
-                st.success("全部完成！请在左侧下载。")
+                st.success("🎉 全部完成！请点击左侧下载按钮。")
