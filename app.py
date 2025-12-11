@@ -54,7 +54,7 @@ def inject_copilot_css(tokens):
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ================= 2. DATA LISTS (YOUR SPECIFIC 25 PROMPTS) =================
+# ================= 2. DATA LISTS =================
 
 # 🇬🇧 English List (Original 25)
 REMIX_LIST_EN = [
@@ -125,6 +125,15 @@ def get_random_remix(language_mode):
         return random.choice(REMIX_LIST_ZH)
     else:
         return random.choice(REMIX_LIST_EN)
+
+# 🔥 核心修复：把更新逻辑放进回调函数里
+def randomize_callback(index, session_key_root, lang, current_id_val):
+    new_remix = get_random_remix(lang)
+    # 1. 更新后台数据列表
+    st.session_state[session_key_root][index] = new_remix
+    # 2. 直接更新组件的Key，这样下次渲染时输入框就会显示新值
+    st.session_state[f"l_{current_id_val}_{index}"] = new_remix['label']
+    st.session_state[f"p_{current_id_val}_{index}"] = new_remix['prompt']
 
 def process_ppt_file(uploaded_file, start_id):
     prs = Presentation(uploaded_file)
@@ -252,26 +261,24 @@ else:
                 # Title + Random Button
                 c_title, c_btn = st.columns([4, 1])
                 with c_title:
-                    # 使用 Key 绑定输入框
                     l_key = f"l_{current_id}_{i}"
                     l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
                 with c_btn:
-                    # 🔥 随机按钮逻辑：现在严格从你提供的25个列表中筛选
-                    if st.button("🎲", key=f"rnd_{current_id}_{i}"):
-                        new_remix = get_random_remix(lang_mode)
-                        # 1. 更新数据源
-                        st.session_state[session_key][i] = new_remix
-                        # 2. 强制更新输入框的 session state
-                        st.session_state[f"l_{current_id}_{i}"] = new_remix['label']
-                        st.session_state[f"p_{current_id}_{i}"] = new_remix['prompt']
-                        st.rerun()
+                    # 🔥 使用 on_click 回调来修复“无法修改 session_state”的错误
+                    st.button("🎲", key=f"rnd_{current_id}_{i}", 
+                             on_click=randomize_callback,
+                             args=(i, session_key, lang_mode, current_id))
 
                 p_key = f"p_{current_id}_{i}"
                 p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=120, key=p_key, label_visibility="collapsed", placeholder="Prompt")
                 
                 # 同步回数据列表（防止手动修改丢失）
-                current_remixes[i]['label'] = l_val
-                current_remixes[i]['prompt'] = p_val
+                # 注意：因为使用了回调，如果是点击按钮触发的刷新，这里的 current_remixes 已经是新的了
+                # 如果是用户手动输入，这里会捕获输入值
+                if current_remixes[i]['label'] != l_val:
+                   current_remixes[i]['label'] = l_val
+                if current_remixes[i]['prompt'] != p_val:
+                   current_remixes[i]['prompt'] = p_val
                 
                 # 验证按钮
                 if st.button(f"🎨 Verify", key=f"v_{current_id}_{i}", use_container_width=True):
