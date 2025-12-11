@@ -286,4 +286,40 @@ else:
         default_text = current_item['original_prompt_text']
         if not default_text.strip().lower().startswith("create"):
             default_text = "Create an image of " + default_text
-        main_prompt = st.text_area("main_prompt",
+        main_prompt = st.text_area("main_prompt", value=default_text, height=120, key=f"m_{current_id}", label_visibility="collapsed")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Remix Suggestions**")
+
+        session_key = f"remix_{current_id}"
+        if session_key not in st.session_state:
+            st.session_state[session_key] = random.sample(REMIX_MASTER_LIST, 3)
+        current_remixes = st.session_state[session_key]
+
+        # Suggestion Chips / Cards
+        for i in range(3):
+            with st.container(border=True):
+                c_txt, c_act = st.columns([6, 1])
+                with c_txt:
+                    # 使用 placeholder 保持界面极简 (Minimal Layout)
+                    l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=f"l_{current_id}_{i}", label_visibility="collapsed")
+                    p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=60, key=f"p_{current_id}_{i}", label_visibility="collapsed")
+                    current_remixes[i]['label'] = l_val
+                    current_remixes[i]['prompt'] = p_val
+                with c_act:
+                    st.write("")
+                    # Secondary style button
+                    if st.button("🎲", key=f"b_{current_id}_{i}", help="Swap", type="secondary"):
+                        st.session_state[session_key][i] = get_random_remix()
+                        st.rerun()
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Save & Next", type="primary", use_container_width=True):
+            final_json = { "id": current_id, "prompt": main_prompt, "remixSuggestions": current_remixes }
+            st.session_state.processed_results[f"{current_id}.json"] = final_json
+            if st.session_state.current_idx < len(st.session_state.data) - 1:
+                st.session_state.current_idx += 1
+                st.rerun()
+            else:
+                st.balloons()
+                st.success("All Done!")
