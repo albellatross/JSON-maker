@@ -3,7 +3,6 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 import json
 import io
-import zipfile
 import random
 import urllib.parse
 
@@ -54,10 +53,9 @@ def inject_copilot_css(tokens):
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ================= 2. DATA LISTS =================
+# ================= 2. DATA LISTS (Strictly 25 - English Only) =================
 
-# 🇬🇧 English List (Original 25)
-REMIX_LIST_EN = [
+REMIX_LIST = [
     {"label": "Want a wider view?", "prompt": "Create an expanded image with extended space."},
     {"label": "Want to zoom in?", "prompt": "Create a micro-detail close-up variant of this image."},
     {"label": "Try paper cut style?", "prompt": "Remake this image in a modern paper cut style with layered colors and soft shadows."},
@@ -85,53 +83,18 @@ REMIX_LIST_EN = [
     {"label": "Make this crystal?", "prompt": "Remake this image to be in an iridescent fantasy realm with the subject as translucent glass or crystal, glowing and refracted."}
 ]
 
-# 🇨🇳 Chinese List (Translations of the 25)
-REMIX_LIST_ZH = [
-    {"label": "想要更宽的视野？", "prompt": "生成一张视野更广阔的扩展图像，包含延伸的空间。"},
-    {"label": "想要放大看？", "prompt": "生成这张图片的微距细节特写版本。"},
-    {"label": "试试剪纸风格？", "prompt": "将这张图片重制为现代剪纸风格，带有分层色彩和柔和阴影。"},
-    {"label": "做成刺绣风格？", "prompt": "将这张图片重制为纺织刺绣风格，带有可见的缝合线。"},
-    {"label": "变为像素艺术", "prompt": "将这张图片创作成复古像素艺术风格，带有怀旧细节和游戏光影。"},
-    {"label": "应用故障效果", "prompt": "将这张图片重制为数字故障艺术，带有像素撕裂和赛博朋克噪点。"},
-    {"label": "变为水彩画", "prompt": "将这张图片创作成水彩画。"},
-    {"label": "变为印象派", "prompt": "将这张图片创作成印象派画作，带有松散的笔触、明亮的色彩和稍纵即逝的光线。"},
-    {"label": "用彩铅绘制？", "prompt": "将这张图片重制为彩色铅笔画。"},
-    {"label": "试试工笔画风格？", "prompt": "将这张图片重制为中国工笔画，带有精确的轮廓、柔和的晕染和细腻的形态。"},
-    {"label": "试试中国剪纸？", "prompt": "将这张图片重制为中国传统剪纸，带有红色剪影、文化纹样和对称图案。"},
-    {"label": "试试浮世绘风格？", "prompt": "将这张图片重制为日本浮世绘，带有木刻纹理、平涂色彩和流畅线条。"},
-    {"label": "做成肖像照？", "prompt": "将这张图片重制为摄影肖像，带有自然光和浅景深。"},
-    {"label": "做成彩色玻璃？", "prompt": "将这张图片重制为彩色玻璃设计，带有多彩的玻璃块、粗轮廓和发光效果。"},
-    {"label": "试试丝网印刷？", "prompt": "将这张图片重制为丝网印刷品。"},
-    {"label": "做成动漫？", "prompt": "将这张图片重制为动漫插画，带有表现力的光影和动态布局。"},
-    {"label": "增加怀旧色调？", "prompt": "将这张图片重制为带有陈旧纸张纹理的怀旧棕褐色调记忆。"},
-    {"label": "做成波普艺术？", "prompt": "将这张图片重制为高饱和度的波普艺术，带有大胆的色块和色调。"},
-    {"label": "做成渐变网格？", "prompt": "将这张图片重制为渐变网格风格，颜色在画面中无缝融合。"},
-    {"label": "做成3D手办？", "prompt": "将这张图片重制为逼真的3D收藏手办渲染图，由树脂或塑料等真实材料制成，带有电影级布光、摄影棚背景和超精细建模细节。"},
-    {"label": "试试双色调？", "prompt": "将这张图片重制为双色调图像。"},
-    {"label": "做成单色？", "prompt": "将这张图片重制为单色图像。"},
-    {"label": "增加霓虹灯光？", "prompt": "将这张图片重制为带有强烈色彩对比的霓虹灯场景。"},
-    {"label": "做成机械风格？", "prompt": "生成主体的机械版本，带有外露的齿轮、金属关节和精密组件。"},
-    {"label": "做成水晶质感？", "prompt": "将这张图片重制为彩虹色的幻想领域，主体呈现发光和折射的半透明玻璃或水晶质感。"}
-]
-
 COPILOT_GEN_INSTRUCTION = """A remix prompt consists of a short, 2–5-word title and an instruction.
 Please write 5 remix prompts for me based on the uploaded image.
 Format:
 Label: [Title]
 Prompt: [Instruction]"""
 
-def get_random_remix(language_mode):
-    if language_mode == "Chinese/中文":
-        return random.choice(REMIX_LIST_ZH)
-    else:
-        return random.choice(REMIX_LIST_EN)
+def get_random_remix():
+    return random.choice(REMIX_LIST)
 
-# 🔥 核心修复：把更新逻辑放进回调函数里
-def randomize_callback(index, session_key_root, lang, current_id_val):
-    new_remix = get_random_remix(lang)
-    # 1. 更新后台数据列表
+def randomize_callback(index, session_key_root, current_id_val):
+    new_remix = get_random_remix()
     st.session_state[session_key_root][index] = new_remix
-    # 2. 直接更新组件的Key，这样下次渲染时输入框就会显示新值
     st.session_state[f"l_{current_id_val}_{index}"] = new_remix['label']
     st.session_state[f"p_{current_id_val}_{index}"] = new_remix['prompt']
 
@@ -158,17 +121,29 @@ def process_ppt_file(uploaded_file, start_id):
             current_id += 1
     return extracted_data, image_storage
 
-def create_final_zip(processed_jsons, image_storage):
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        for filename, json_data in processed_jsons.items():
-            json_str = json.dumps(json_data, indent=4, ensure_ascii=False)
-            zip_file.writestr(f"jsons/{filename}", json_str)
-        for json_filename, json_data in processed_jsons.items():
-            img_name = f"{json_data['id']}.png"
-            if img_name in image_storage:
-                zip_file.writestr(f"images/{img_name}", image_storage[img_name])
-    return zip_buffer
+def generate_combined_json(processed_results):
+    """
+    Export strictly clean JSON structure:
+    [ {id, prompt, remixSuggestions: [{label, prompt}, ...]}, ... ]
+    """
+    combined_list = []
+    sorted_keys = sorted(processed_results.keys(), key=lambda x: int(processed_results[x]['id']))
+    
+    for key in sorted_keys:
+        item = processed_results[key]
+        clean_item = {
+            "id": item.get("id"),
+            "prompt": item.get("prompt"),
+            "remixSuggestions": [
+                {
+                    "label": r.get("label"), 
+                    "prompt": r.get("prompt")
+                } for r in item.get("remixSuggestions", [])
+            ]
+        }
+        combined_list.append(clean_item)
+        
+    return json.dumps(combined_list, indent=4, ensure_ascii=False)
 
 # ================= 3. MAIN UI =================
 st.set_page_config(page_title="Editor", layout="wide", page_icon="🧩")
@@ -185,7 +160,7 @@ if not st.session_state.data:
     st.markdown("<br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown(f"<div style='text-align: center;'><h1>Remix Editor</h1><p style='color:#594134'>Clean Workflow</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><h1>Clean Studio</h1><p style='color:#594134'>Single JSON Output</p></div>", unsafe_allow_html=True)
         with st.container(border=True):
             uploaded_ppt = st.file_uploader("Upload PPTX", type=["pptx"])
             start_id = st.number_input("Start ID", value=453, step=1)
@@ -208,13 +183,12 @@ else:
     current_id = item['id']
     img_name = item['image_filename']
 
-    # Header: ID + Save Button (Minimal)
+    # Header: ID
     col_h1, col_h2 = st.columns([4, 1])
     with col_h1:
         st.markdown(f"## ID {current_id}")
     with col_h2:
         if st.button("💾 Save & Next", type="primary", use_container_width=True, key="save_top"):
-            # Trigger logic handled at bottom, button just for UI
             pass 
 
     # === SECTION 1: Top Image ===
@@ -235,16 +209,12 @@ else:
     
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # === SECTION 3: Element Remix Suggestions ===
-    # 获取语言设置（默认为中文，如果需要更改，在底部菜单）
-    lang_mode = st.session_state.get('lang_mode', 'Chinese/中文')
-    
-    st.markdown(f"#### 🎨 Remix Suggestions ({lang_mode})")
+    # === SECTION 3: Remix Suggestions ===
+    st.markdown(f"#### 🎨 Remix Suggestions")
     
     session_key = f"remix_{current_id}"
-    # 初始化
     if session_key not in st.session_state:
-        st.session_state[session_key] = [get_random_remix(lang_mode) for _ in range(3)]
+        st.session_state[session_key] = [get_random_remix() for _ in range(3)]
         
     current_remixes = st.session_state[session_key]
 
@@ -258,29 +228,26 @@ else:
     for i in range(3):
         with cols[i]:
             with st.container(border=True):
-                # Title + Random Button
                 c_title, c_btn = st.columns([4, 1])
                 with c_title:
                     l_key = f"l_{current_id}_{i}"
                     l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
                 with c_btn:
-                    # 🔥 使用 on_click 回调来修复“无法修改 session_state”的错误
+                    # Callback without lang argument
                     st.button("🎲", key=f"rnd_{current_id}_{i}", 
                              on_click=randomize_callback,
-                             args=(i, session_key, lang_mode, current_id))
+                             args=(i, session_key, current_id))
 
                 p_key = f"p_{current_id}_{i}"
                 p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=120, key=p_key, label_visibility="collapsed", placeholder="Prompt")
                 
-                # 同步回数据列表（防止手动修改丢失）
-                # 注意：因为使用了回调，如果是点击按钮触发的刷新，这里的 current_remixes 已经是新的了
-                # 如果是用户手动输入，这里会捕获输入值
+                # Update List
                 if current_remixes[i]['label'] != l_val:
                    current_remixes[i]['label'] = l_val
                 if current_remixes[i]['prompt'] != p_val:
                    current_remixes[i]['prompt'] = p_val
                 
-                # 验证按钮
+                # Verify
                 if st.button(f"🎨 Verify", key=f"v_{current_id}_{i}", use_container_width=True):
                     clean_prompt = urllib.parse.quote(p_val)
                     seed = random.randint(0, 9999)
@@ -292,30 +259,31 @@ else:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 底部隐形菜单：用于下载和设置语言，不占用主界面空间
-    with st.expander("⚙️ Menu (Download / Language)", expanded=False):
-        c_menu1, c_menu2 = st.columns(2)
-        with c_menu1:
-            st.markdown("##### Language")
-            # 绑定 session state
-            new_lang = st.radio("Select Language", ["English", "Chinese/中文"], index=1, key='lang_mode')
-        with c_menu2:
-            st.markdown("##### Export")
-            total = len(st.session_state.data)
-            done = len(st.session_state.processed_results)
-            st.write(f"Progress: {done} / {total}")
-            if done > 0:
-                zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
-                st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary")
+    # 底部隐形菜单：仅用于下载，无语言选项
+    with st.expander("⚙️ Export Menu", expanded=False):
+        total = len(st.session_state.data)
+        done = len(st.session_state.processed_results)
+        st.write(f"Progress: {done} / {total}")
+        if done > 0:
+            json_str = generate_combined_json(st.session_state.processed_results)
+            st.download_button(
+                "⬇️ Download JSON (dataset.json)", 
+                data=json_str, 
+                file_name="dataset.json", 
+                mime="application/json", 
+                type="primary"
+            )
 
     # 底部保存逻辑
     if st.button("💾 Save & Next", type="primary", use_container_width=True, key="save_bottom"):
+        
+        # 内部暂时保留完整结构，导出时会自动清洗
         final_json = { 
             "id": current_id, 
             "prompt": main_prompt, 
-            "remixSuggestions": current_remixes,
-            "language": lang_mode
+            "remixSuggestions": current_remixes
         }
+        
         st.session_state.processed_results[f"{current_id}.json"] = final_json
         if st.session_state.current_idx < len(st.session_state.data) - 1:
             st.session_state.current_idx += 1
