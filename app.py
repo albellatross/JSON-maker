@@ -1,4 +1,8 @@
 import streamlit as st
+# 设置页面配置必须是第一个 Streamlit 命令
+st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
+
+import gc # 引入垃圾回收
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 import json
@@ -9,12 +13,11 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS & LAYOUT CSS =================
+# ================= 🎨 1. DESIGN TOKENS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0", 
     "surface_color": "rgba(255, 255, 255, 0.90)", 
     "text_primary": "#311F10",        
-    "text_secondary": "#594134",
     "accent_color": "#311F10", 
     "radius_card": "16px",
     "radius_pill": "999px",
@@ -26,56 +29,30 @@ def inject_layout_css(tokens):
     css = f"""
     <style>
         .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
-        
-        /* 🔥 彻底隐藏 Streamlit 顶部 Header */
-        header, [data-testid="stHeader"] {{ display: none !important; visibility: hidden !important; }}
-        
-        /* 🔥 移除顶部留白 */
+        header, [data-testid="stHeader"] {{ display: none !important; }}
         .block-container {{
-            padding-top: 1rem !important;
-            padding-bottom: 1rem !important;
-            padding-left: 2rem !important;
-            padding-right: 2rem !important;
+            padding: 1rem 2rem !important;
             max-width: 98% !important;
             margin-top: 0 !important;
         }}
-        
         h1, h2, h3 {{ color: {tokens['text_primary']} !important; margin: 0 !important; }}
         
-        /* 左侧面板：高度自适应 */
         .left-panel {{
             height: 85vh; 
             background-color: #EFEBE9; 
             border-radius: 16px;
-            display: flex;
-            justify-content: center;
-            align_items: center;
-            overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.05);
+            display: flex; justify-content: center; align_items: center;
+            overflow: hidden; border: 1px solid rgba(0,0,0,0.05);
         }}
-        
         .left-panel img {{
-            max-width: 95%;
-            max-height: 95%;
-            width: auto;
-            height: auto;
-            object-fit: contain; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            max-width: 95%; max-height: 95%; width: auto; height: auto;
+            object-fit: contain; box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }}
-
-        /* 右侧面板：独立滚动 */
         .right-scroll-area {{
-            height: 85vh;
-            overflow-y: auto;
-            padding-right: 12px;
-            padding-left: 5px;
-            padding-bottom: 60px;
+            height: 85vh; overflow-y: auto; padding-right: 12px; padding-left: 5px; padding-bottom: 60px;
         }}
-        
         .right-scroll-area::-webkit-scrollbar {{ width: 6px; }}
         .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
-
-        /* 卡片样式 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
@@ -84,17 +61,14 @@ def inject_layout_css(tokens):
             border: 1px solid rgba(255,255,255,0.6);
             margin-bottom: 1rem;
         }}
-        
         .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
         .stTextInput input {{ font-size: 13px; }}
-        
         .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; }}
         div[data-testid="stButton"] > button[kind="primary"] {{ 
             background-color: {tokens['accent_color']} !important; 
             color: #FFFFFF !important; 
             border: none !important;
         }}
-        
         img {{ border-radius: 12px !important; }}
         .css-1v0mbdj a {{ display: none; }}
         .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
@@ -102,7 +76,7 @@ def inject_layout_css(tokens):
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ================= 2. DATA LISTS (Fixed 25) =================
+# ================= 2. DATA LISTS =================
 
 REMIX_LIST_EN = [
     {"label": "Want a wider view?", "prompt": "Create an expanded image with extended space."},
@@ -140,8 +114,6 @@ Prompt: [Instruction]"""
 
 def get_random_remix(): return random.choice(REMIX_LIST_EN)
 
-# --- Callbacks (Fixing StreamlitAPIException) ---
-
 def randomize_callback(index, session_key_root, current_id_val):
     new_remix = get_random_remix()
     st.session_state[session_key_root][index] = new_remix
@@ -150,7 +122,7 @@ def randomize_callback(index, session_key_root, current_id_val):
 
 def parse_bulk_remix_text(raw_text):
     if not raw_text.strip(): return []
-    # 扩展的关键词列表，支持更多动词开头
+    # 关键词库
     ACTION_KEYWORDS = ("create", "change", "recreate", "replace", "generate", "make", "transform", "add", "switch", "use", "apply", "convert", "turn")
     
     lines = raw_text.split('\n')
@@ -162,7 +134,6 @@ def parse_bulk_remix_text(raw_text):
     for i, line in enumerate(lines):
         clean_current = clean_line_start(line)
         lower_current = clean_current.lower()
-        
         is_prompt_start = lower_current.startswith(ACTION_KEYWORDS)
         
         inline_split = line.split(":", 1)
@@ -178,7 +149,6 @@ def parse_bulk_remix_text(raw_text):
             else:
                 prompt_text = clean_current
                 processed_indices.add(i)
-                # 向上回溯找标题
                 k = i - 1
                 while k >= 0:
                     prev_line = lines[k].strip()
@@ -187,7 +157,6 @@ def parse_bulk_remix_text(raw_text):
                         processed_indices.add(k)
                         break
                     k -= 1
-            
             j = i + 1
             while j < len(lines):
                 next_line = lines[j].strip()
@@ -197,46 +166,40 @@ def parse_bulk_remix_text(raw_text):
                 if j + 1 < len(lines):
                     clean_next_next = clean_line_start(lines[j+1])
                     if clean_next_next.lower().startswith(ACTION_KEYWORDS): break
-                
                 prompt_text += " " + next_line
                 processed_indices.add(j)
                 j += 1
-                
             parsed_items.append({"label": title, "prompt": prompt_text})
     return parsed_items
 
 def batch_parse_callback(session_key, current_id_val):
-    # 修复：在回调中安全获取和清空
     batch_text = st.session_state.get("batch_input_area", "")
     parsed_items = parse_bulk_remix_text(batch_text)
     
     if parsed_items:
-        # 补齐
         final_items = parsed_items[:3]
         while len(final_items) < 3:
             final_items.append(get_random_remix())
         
-        # 更新数据
         st.session_state[session_key] = final_items
-        
-        # 显式更新组件key
         for idx, item in enumerate(final_items):
             st.session_state[f"l_{current_id_val}_{idx}"] = item['label']
             st.session_state[f"p_{current_id_val}_{idx}"] = item['prompt']
         
-        # 🔥 关键修复：在这里清空，且只清空一次
-        st.session_state["batch_input_area"] = "" 
+        st.session_state["batch_input_area"] = ""
         st.session_state["_parse_success"] = True
         st.session_state["_parsed_count"] = len(parsed_items)
     else:
         st.session_state["_parse_error"] = True
 
-# --- File Operations ---
+# --- File Operations (Memory Optimized) ---
 
 def process_ppt_file(uploaded_file, start_id):
-    # 🔥 修复：重置文件指针
-    uploaded_file.seek(0)
+    # 强制清理内存
+    gc.collect()
+    
     try:
+        uploaded_file.seek(0)
         prs = Presentation(uploaded_file)
     except zipfile.BadZipFile:
         raise ValueError("File is not a valid .pptx file.")
@@ -246,26 +209,40 @@ def process_ppt_file(uploaded_file, start_id):
     current_id = int(start_id)
     extracted_data = []
     image_storage = {}
+    
+    # 限制处理数量防止崩溃
+    MAX_SLIDES = 100 
+    
     for index, slide in enumerate(prs.slides):
+        if index >= MAX_SLIDES:
+            st.warning(f"⚠️ Limit reached: Processing first {MAX_SLIDES} slides to prevent memory crash.")
+            break
+            
         slide_info = {"id": str(current_id), "original_prompt_text": "", "image_filename": ""}
         found_image = False
+        
         for shape in slide.shapes:
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and not found_image:
                 img_name = f"{current_id}.png"
+                # 直接读取二进制，不进行图像处理以节省内存
                 image_storage[img_name] = shape.image.blob
                 slide_info["image_filename"] = img_name
                 found_image = True
+            
             if shape.has_text_frame:
                 text = shape.text.strip()
                 if len(text) > 10 and len(text) > len(slide_info["original_prompt_text"]):
                     slide_info["original_prompt_text"] = text
+        
         if found_image:
             extracted_data.append(slide_info)
             current_id += 1
+    
+    gc.collect() # 再次清理
     return extracted_data, image_storage
 
-# 🔥 修复：修正变量名 processed_results -> processed_jsons
 def create_final_zip(processed_jsons, image_storage):
+    gc.collect()
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         combined_list = []
@@ -285,10 +262,11 @@ def create_final_zip(processed_jsons, image_storage):
                 zip_file.writestr(f"images/{target_img_name}", image_storage[target_img_name])
         json_str = json.dumps(combined_list, indent=4, ensure_ascii=False)
         zip_file.writestr("dataset.json", json_str)
+    
+    gc.collect()
     return zip_buffer
 
 # ================= 3. MAIN UI =================
-st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
 inject_layout_css(MY_DESIGN_TOKENS)
 
 if 'data' not in st.session_state: st.session_state.data = []
@@ -301,7 +279,7 @@ if not st.session_state.data:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🧶 Remix Studio</h1><p style='color:#64748B'>Upload PPTX • Edit • Export</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🧶 Remix Studio</h1><p style='color:#64748B'>Stable Version</p></div>", unsafe_allow_html=True)
         with st.container(border=True):
             uploaded_ppt = st.file_uploader("Upload Presentation", type=["pptx"])
             start_id = st.number_input("Start ID", value=453, step=1)
@@ -326,33 +304,32 @@ else:
     current_id = item['id']
     img_name = item['image_filename']
 
-    # 1. Top Control Bar (Compact)
-    with st.container():
-        c1, c2, c3 = st.columns([1, 4, 1], gap="small")
-        with c1:
-            st.markdown(f"### ID {current_id}")
-        with c2:
-            total = len(st.session_state.data)
-            done = len(st.session_state.processed_results)
-            st.progress(done / total if total > 0 else 0)
-        with c3:
-            if st.button("💾 Next Image", type="primary", use_container_width=True):
-                session_key = f"remix_{current_id}"
-                current_remixes = st.session_state.get(session_key, [])
-                main_p = st.session_state.get(f"m_{current_id}", "")
-                
-                final_json = { 
-                    "id": current_id, 
-                    "prompt": main_p, 
-                    "remixSuggestions": current_remixes
-                }
-                st.session_state.processed_results[f"{current_id}.json"] = final_json
-                if st.session_state.current_idx < len(st.session_state.data) - 1:
-                    st.session_state.current_idx += 1
-                    st.rerun()
-                else:
-                    st.balloons()
-                    st.success("All Done!")
+    # 1. Top Bar
+    c1, c2, c3 = st.columns([1, 4, 1], gap="small")
+    with c1:
+        st.markdown(f"### ID {current_id}")
+    with c2:
+        total = len(st.session_state.data)
+        done = len(st.session_state.processed_results)
+        st.progress(done / total if total > 0 else 0)
+    with c3:
+        if st.button("💾 Next Image", type="primary", use_container_width=True):
+            session_key = f"remix_{current_id}"
+            current_remixes = st.session_state.get(session_key, [])
+            main_p = st.session_state.get(f"m_{current_id}", "")
+            
+            final_json = { 
+                "id": current_id, 
+                "prompt": main_p, 
+                "remixSuggestions": current_remixes
+            }
+            st.session_state.processed_results[f"{current_id}.json"] = final_json
+            if st.session_state.current_idx < len(st.session_state.data) - 1:
+                st.session_state.current_idx += 1
+                st.rerun()
+            else:
+                st.balloons()
+                st.success("All Done!")
 
     st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
 
@@ -371,11 +348,10 @@ else:
         else:
             st.error("Image missing")
 
-    # === RIGHT: Editor (Scrollable) ===
+    # === RIGHT: Editor ===
     with col_right:
         st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
 
-        # Main Prompt
         st.markdown("#### 📝 Main Prompt")
         default_text = item['original_prompt_text']
         if not default_text.strip().lower().startswith("create"):
@@ -384,7 +360,6 @@ else:
 
         st.markdown("---")
 
-        # Paste (Callback Enabled)
         with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
             st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
             
@@ -420,7 +395,6 @@ else:
                 if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
                 p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
 
-                # Manual Sync (Safety)
                 if current_remixes[i]['label'] != l_val: current_remixes[i]['label'] = l_val
                 if current_remixes[i]['prompt'] != p_val: current_remixes[i]['prompt'] = p_val
 
@@ -435,7 +409,6 @@ else:
 
         st.markdown('</div>', unsafe_allow_html=True) # End scrollable
 
-        # Export Menu
         st.markdown("---")
         with st.expander("⚙️ Download Data", expanded=False):
             if done > 0:
