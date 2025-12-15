@@ -1,8 +1,4 @@
 import streamlit as st
-# 设置页面配置必须是第一个 Streamlit 命令
-st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
-
-import gc # 引入垃圾回收
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 import json
@@ -13,13 +9,13 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS =================
+# ================= 🎨 1. DESIGN TOKENS & CSS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0", 
     "surface_color": "rgba(255, 255, 255, 0.90)", 
     "text_primary": "#311F10",        
     "accent_color": "#311F10", 
-    "radius_card": "16px",
+    "radius_card": "12px",
     "radius_pill": "999px",
     "shadow_tinted": "0 2px 8px rgba(210, 150, 120, 0.08)",
     "font_family": "'Segoe UI', 'Microsoft YaHei', sans-serif"
@@ -30,48 +26,77 @@ def inject_layout_css(tokens):
     <style>
         .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
         header, [data-testid="stHeader"] {{ display: none !important; }}
+        
         .block-container {{
-            padding: 1rem 2rem !important;
-            max-width: 98% !important;
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 1.5rem !important;
+            padding-right: 1.5rem !important;
+            max-width: 100% !important;
             margin-top: 0 !important;
         }}
-        h1, h2, h3 {{ color: {tokens['text_primary']} !important; margin: 0 !important; }}
         
+        h1, h2, h3, h4, p {{ margin-top: 0 !important; padding-top: 0 !important; }}
+        
+        /* Tab 样式 */
+        .stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); margin-bottom: 1rem; }}
+        .stTabs [data-baseweb="tab"] {{ font-weight: 600; color: {tokens['text_primary']}; }}
+        
+        /* 左侧面板 */
         .left-panel {{
-            height: 85vh; 
+            height: 88vh; 
             background-color: #EFEBE9; 
-            border-radius: 16px;
-            display: flex; justify-content: center; align_items: center;
-            overflow: hidden; border: 1px solid rgba(0,0,0,0.05);
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align_items: center;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.05);
         }}
         .left-panel img {{
-            max-width: 95%; max-height: 95%; width: auto; height: auto;
-            object-fit: contain; box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            max-width: 98%;
+            max-height: 98%;
+            width: auto;
+            height: auto;
+            object-fit: contain; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }}
+
+        /* 右侧面板 */
         .right-scroll-area {{
-            height: 85vh; overflow-y: auto; padding-right: 12px; padding-left: 5px; padding-bottom: 60px;
+            height: 88vh;
+            overflow-y: auto;
+            padding-right: 12px;
+            padding-left: 2px;
+            padding-bottom: 20px;
         }}
         .right-scroll-area::-webkit-scrollbar {{ width: 6px; }}
         .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
+
+        /* 卡片样式 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
-            padding: 1.2rem;
+            padding: 1rem;
             box-shadow: {tokens['shadow_tinted']};
             border: 1px solid rgba(255,255,255,0.6);
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }}
+        
         .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
         .stTextInput input {{ font-size: 13px; }}
+        
         .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; }}
         div[data-testid="stButton"] > button[kind="primary"] {{ 
             background-color: {tokens['accent_color']} !important; 
             color: #FFFFFF !important; 
             border: none !important;
+            width: 100%;
         }}
-        img {{ border-radius: 12px !important; }}
+        
+        img {{ border-radius: 8px !important; }}
         .css-1v0mbdj a {{ display: none; }}
-        .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
+        .element-container {{ margin-bottom: 0.5rem !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -122,20 +147,16 @@ def randomize_callback(index, session_key_root, current_id_val):
 
 def parse_bulk_remix_text(raw_text):
     if not raw_text.strip(): return []
-    # 关键词库
     ACTION_KEYWORDS = ("create", "change", "recreate", "replace", "generate", "make", "transform", "add", "switch", "use", "apply", "convert", "turn")
-    
     lines = raw_text.split('\n')
     parsed_items = []
     processed_indices = set() 
-    
     def clean_line_start(s): return re.sub(r'^[\d\.\-\*\s]+', '', s).strip()
 
     for i, line in enumerate(lines):
         clean_current = clean_line_start(line)
         lower_current = clean_current.lower()
         is_prompt_start = lower_current.startswith(ACTION_KEYWORDS)
-        
         inline_split = line.split(":", 1)
         has_inline_title = len(inline_split) > 1 and clean_line_start(inline_split[1]).lower().startswith(ACTION_KEYWORDS)
 
@@ -175,31 +196,25 @@ def parse_bulk_remix_text(raw_text):
 def batch_parse_callback(session_key, current_id_val):
     batch_text = st.session_state.get("batch_input_area", "")
     parsed_items = parse_bulk_remix_text(batch_text)
-    
     if parsed_items:
         final_items = parsed_items[:3]
         while len(final_items) < 3:
             final_items.append(get_random_remix())
-        
         st.session_state[session_key] = final_items
         for idx, item in enumerate(final_items):
             st.session_state[f"l_{current_id_val}_{idx}"] = item['label']
             st.session_state[f"p_{current_id_val}_{idx}"] = item['prompt']
-        
         st.session_state["batch_input_area"] = ""
         st.session_state["_parse_success"] = True
         st.session_state["_parsed_count"] = len(parsed_items)
     else:
         st.session_state["_parse_error"] = True
 
-# --- File Operations (Memory Optimized) ---
+# --- File Operations ---
 
 def process_ppt_file(uploaded_file, start_id):
-    # 强制清理内存
-    gc.collect()
-    
+    uploaded_file.seek(0)
     try:
-        uploaded_file.seek(0)
         prs = Presentation(uploaded_file)
     except zipfile.BadZipFile:
         raise ValueError("File is not a valid .pptx file.")
@@ -209,40 +224,25 @@ def process_ppt_file(uploaded_file, start_id):
     current_id = int(start_id)
     extracted_data = []
     image_storage = {}
-    
-    # 限制处理数量防止崩溃
-    MAX_SLIDES = 100 
-    
     for index, slide in enumerate(prs.slides):
-        if index >= MAX_SLIDES:
-            st.warning(f"⚠️ Limit reached: Processing first {MAX_SLIDES} slides to prevent memory crash.")
-            break
-            
         slide_info = {"id": str(current_id), "original_prompt_text": "", "image_filename": ""}
         found_image = False
-        
         for shape in slide.shapes:
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and not found_image:
                 img_name = f"{current_id}.png"
-                # 直接读取二进制，不进行图像处理以节省内存
                 image_storage[img_name] = shape.image.blob
                 slide_info["image_filename"] = img_name
                 found_image = True
-            
             if shape.has_text_frame:
                 text = shape.text.strip()
                 if len(text) > 10 and len(text) > len(slide_info["original_prompt_text"]):
                     slide_info["original_prompt_text"] = text
-        
         if found_image:
             extracted_data.append(slide_info)
             current_id += 1
-    
-    gc.collect() # 再次清理
     return extracted_data, image_storage
 
 def create_final_zip(processed_jsons, image_storage):
-    gc.collect()
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         combined_list = []
@@ -262,157 +262,244 @@ def create_final_zip(processed_jsons, image_storage):
                 zip_file.writestr(f"images/{target_img_name}", image_storage[target_img_name])
         json_str = json.dumps(combined_list, indent=4, ensure_ascii=False)
         zip_file.writestr("dataset.json", json_str)
-    
-    gc.collect()
     return zip_buffer
 
+def renumber_json_ids(json_file, start_num):
+    try:
+        content = json.load(json_file)
+        if not isinstance(content, list): return None, "Error: JSON root must be a list []"
+        counter = int(start_num)
+        for item in content:
+            if 'id' in item:
+                item['id'] = str(counter)
+                counter += 1
+        return json.dumps(content, indent=4, ensure_ascii=False), None
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+
+# 🔥 NEW: Extract Images Only
+def extract_images_from_ppt(uploaded_file, start_id):
+    uploaded_file.seek(0)
+    try:
+        prs = Presentation(uploaded_file)
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+    
+    zip_buffer = io.BytesIO()
+    current_id = int(start_id)
+    count = 0
+    
+    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                    img_name = f"{current_id}.png"
+                    img_bytes = shape.image.blob
+                    zip_file.writestr(img_name, img_bytes)
+                    current_id += 1
+                    count += 1
+                    
+    return zip_buffer, count
+
 # ================= 3. MAIN UI =================
+st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
 inject_layout_css(MY_DESIGN_TOKENS)
 
-if 'data' not in st.session_state: st.session_state.data = []
-if 'images' not in st.session_state: st.session_state.images = {}
-if 'processed_results' not in st.session_state: st.session_state.processed_results = {}
-if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
+# Tabs
+tab_main, tab_fix, tab_extract = st.tabs(["🧶 Remix Editor", "🔢 JSON ID Fixer", "🖼️ PPT Image Extractor"])
 
-# --- Phase 1: Upload ---
-if not st.session_state.data:
-    st.markdown("<br><br>", unsafe_allow_html=True)
+# ================= TAB 1: REMIX EDITOR =================
+with tab_main:
+    if 'data' not in st.session_state: st.session_state.data = []
+    if 'images' not in st.session_state: st.session_state.images = {}
+    if 'processed_results' not in st.session_state: st.session_state.processed_results = {}
+    if 'current_idx' not in st.session_state: st.session_state.current_idx = 0
+
+    if not st.session_state.data:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🧶 Remix Studio</h1><p style='color:#64748B'>Upload PPTX • Edit • Export</p></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                uploaded_ppt = st.file_uploader("Upload Presentation", type=["pptx"])
+                start_id = st.number_input("Start ID", value=453, step=1)
+                st.markdown("<br>", unsafe_allow_html=True)
+                if uploaded_ppt:
+                    if st.button("🚀 Load Slides", type="primary", use_container_width=True):
+                        with st.spinner("Processing..."):
+                            try:
+                                data, images = process_ppt_file(uploaded_ppt, start_id)
+                                if not data: st.error("No valid slides found.")
+                                else:
+                                    st.session_state.data = data
+                                    st.session_state.images = images
+                                    st.session_state.current_idx = 0
+                                    st.rerun()
+                            except ValueError as ve: st.error(str(ve))
+                            except Exception as e: st.error(f"Error: {e}")
+
+    else:
+        item = st.session_state.data[st.session_state.current_idx]
+        current_id = item['id']
+        img_name = item['image_filename']
+
+        col_left, col_right = st.columns([1.2, 1], gap="medium")
+
+        # === LEFT ===
+        with col_left:
+            st.markdown(f"#### ID {current_id}")
+            if img_name in st.session_state.images:
+                b64_img = base64.b64encode(st.session_state.images[img_name]).decode()
+                st.markdown(f"""<div class="left-panel"><img src="data:image/png;base64,{b64_img}" /></div>""", unsafe_allow_html=True)
+            else:
+                st.error("Image missing")
+
+        # === RIGHT ===
+        with col_right:
+            # 1. Top Bar
+            c_top1, c_top2 = st.columns([3, 1])
+            with c_top1:
+                total = len(st.session_state.data)
+                done = len(st.session_state.processed_results)
+                st.progress(done / total if total > 0 else 0)
+                st.caption(f"Progress: {done} / {total}")
+            
+            with c_top2:
+                with st.popover("⚙️ Export"):
+                    if done >= 0:
+                        export_data = st.session_state.processed_results.copy()
+                        curr_main = st.session_state.get(f"m_{current_id}", "")
+                        curr_remixes = []
+                        session_key = f"remix_{current_id}"
+                        if session_key in st.session_state:
+                            raw_remixes = st.session_state[session_key]
+                            for idx in range(len(raw_remixes)):
+                                l_val = st.session_state.get(f"l_{current_id}_{idx}", raw_remixes[idx]['label'])
+                                p_val = st.session_state.get(f"p_{current_id}_{idx}", raw_remixes[idx]['prompt'])
+                                curr_remixes.append({"label": l_val, "prompt": p_val})
+                        
+                        export_data[f"{current_id}.json"] = {
+                            "id": current_id,
+                            "prompt": curr_main,
+                            "remixSuggestions": curr_remixes
+                        }
+                        
+                        zip_buffer = create_final_zip(export_data, st.session_state.images)
+                        st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
+
+            st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
+
+            st.markdown("#### 📝 Main Prompt")
+            default_text = item['original_prompt_text']
+            if not default_text.strip().lower().startswith("create"):
+                default_text = "Create an image of " + default_text
+            main_prompt = st.text_area("main_hidden", value=default_text, height=80, key=f"m_{current_id}", label_visibility="collapsed")
+
+            st.markdown("---")
+
+            # Batch Paste
+            with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
+                st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
+                session_key = f"remix_{current_id}"
+                st.button("Parse & Replace", on_click=batch_parse_callback, args=(session_key, current_id))
+                if st.session_state.get("_parse_success"):
+                    st.success(f"Updated {st.session_state['_parsed_count']} items!")
+                    st.session_state["_parse_success"] = False
+                if st.session_state.get("_parse_error"):
+                    st.warning("No valid prompts found.")
+                    st.session_state["_parse_error"] = False
+
+            # Remix Cards
+            st.markdown("#### 🎨 Remix Suggestions")
+            if session_key not in st.session_state:
+                st.session_state[session_key] = [get_random_remix() for _ in range(3)]
+            current_remixes = st.session_state[session_key]
+
+            for i in range(3):
+                with st.container(border=True):
+                    c_t, c_b = st.columns([5, 1])
+                    with c_t:
+                        l_key = f"l_{current_id}_{i}"
+                        if l_key not in st.session_state: st.session_state[l_key] = current_remixes[i]['label']
+                        l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
+                    with c_b:
+                        st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id))
+
+                    p_key = f"p_{current_id}_{i}"
+                    if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
+                    p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
+
+                    if current_remixes[i]['label'] != l_val: current_remixes[i]['label'] = l_val
+                    if current_remixes[i]['prompt'] != p_val: current_remixes[i]['prompt'] = p_val
+
+                    if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
+                        clean = urllib.parse.quote(p_val)
+                        seed = random.randint(0, 9999)
+                        url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=600&height=600&nologo=true"
+                        st.session_state[f"poll_img_{current_id}_{i}"] = url
+                    
+                    if f"poll_img_{current_id}_{i}" in st.session_state:
+                        st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
+
+            st.markdown('</div>', unsafe_allow_html=True) # End scrollable
+
+            # Bottom Bar
+            st.markdown("<br>", unsafe_allow_html=True)
+            b_col1, b_col2 = st.columns([1, 4])
+            with b_col1:
+                if st.button("⬅️", key="prev_bottom", use_container_width=True, disabled=st.session_state.current_idx == 0):
+                    st.session_state.current_idx -= 1
+                    st.rerun()
+            with b_col2:
+                if st.button("💾 Save & Next", type="primary", use_container_width=True):
+                    final_json = { 
+                        "id": current_id, 
+                        "prompt": main_prompt, 
+                        "remixSuggestions": current_remixes
+                    }
+                    st.session_state.processed_results[f"{current_id}.json"] = final_json
+                    if st.session_state.current_idx < len(st.session_state.data) - 1:
+                        st.session_state.current_idx += 1
+                        st.rerun()
+                    else:
+                        st.balloons()
+                        st.success("All Done! Check Export.")
+
+# ================= TAB 2: JSON FIXER =================
+with tab_fix:
+    st.markdown("<br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🧶 Remix Studio</h1><p style='color:#64748B'>Stable Version</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🔢 JSON ID Fixer</h1><p style='color:#64748B'>Upload dataset.json • Renumber IDs</p></div>", unsafe_allow_html=True)
         with st.container(border=True):
-            uploaded_ppt = st.file_uploader("Upload Presentation", type=["pptx"])
-            start_id = st.number_input("Start ID", value=453, step=1)
-            st.markdown("<br>", unsafe_allow_html=True)
-            if uploaded_ppt:
-                if st.button("🚀 Load Slides", type="primary", use_container_width=True):
-                    with st.spinner("Processing..."):
-                        try:
-                            data, images = process_ppt_file(uploaded_ppt, start_id)
-                            if not data: st.error("No valid slides found.")
-                            else:
-                                st.session_state.data = data
-                                st.session_state.images = images
-                                st.session_state.current_idx = 0
-                                st.rerun()
-                        except ValueError as ve: st.error(str(ve))
-                        except Exception as e: st.error(f"Error: {e}")
+            up_json = st.file_uploader("Upload dataset.json", type=["json"])
+            new_start = st.number_input("New Start ID", value=1001, step=1)
+            
+            if up_json:
+                if st.button("🚀 Process & Renumber", type="primary", use_container_width=True):
+                    new_json_str, error = renumber_json_ids(up_json, new_start)
+                    if error:
+                        st.error(error)
+                    else:
+                        st.success("IDs updated successfully!")
+                        st.download_button("⬇️ Download New JSON", data=new_json_str, file_name="dataset_renumbered.json", mime="application/json", type="primary", use_container_width=True)
 
-# --- Phase 2: Editor ---
-else:
-    item = st.session_state.data[st.session_state.current_idx]
-    current_id = item['id']
-    img_name = item['image_filename']
-
-    # 1. Top Bar
-    c1, c2, c3 = st.columns([1, 4, 1], gap="small")
-    with c1:
-        st.markdown(f"### ID {current_id}")
+# ================= TAB 3: IMAGE EXTRACTOR =================
+with tab_extract:
+    st.markdown("<br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        total = len(st.session_state.data)
-        done = len(st.session_state.processed_results)
-        st.progress(done / total if total > 0 else 0)
-    with c3:
-        if st.button("💾 Next Image", type="primary", use_container_width=True):
-            session_key = f"remix_{current_id}"
-            current_remixes = st.session_state.get(session_key, [])
-            main_p = st.session_state.get(f"m_{current_id}", "")
+        st.markdown(f"<div style='text-align: center; margin-bottom:20px;'><h1>🖼️ PPT Image Extractor</h1><p style='color:#64748B'>Extract all images & Rename by ID</p></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            ext_ppt = st.file_uploader("Upload Presentation (.pptx)", type=["pptx"], key="ext_uploader")
+            ext_start = st.number_input("Start Filename ID", value=453, step=1, key="ext_start")
             
-            final_json = { 
-                "id": current_id, 
-                "prompt": main_p, 
-                "remixSuggestions": current_remixes
-            }
-            st.session_state.processed_results[f"{current_id}.json"] = final_json
-            if st.session_state.current_idx < len(st.session_state.data) - 1:
-                st.session_state.current_idx += 1
-                st.rerun()
-            else:
-                st.balloons()
-                st.success("All Done!")
-
-    st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
-
-    # 2. Main Split View
-    col_left, col_right = st.columns([2, 3], gap="medium")
-
-    # === LEFT: Image ===
-    with col_left:
-        if img_name in st.session_state.images:
-            b64_img = base64.b64encode(st.session_state.images[img_name]).decode()
-            st.markdown(f"""
-            <div class="left-panel">
-                <img src="data:image/png;base64,{b64_img}" />
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.error("Image missing")
-
-    # === RIGHT: Editor ===
-    with col_right:
-        st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
-
-        st.markdown("#### 📝 Main Prompt")
-        default_text = item['original_prompt_text']
-        if not default_text.strip().lower().startswith("create"):
-            default_text = "Create an image of " + default_text
-        main_prompt = st.text_area("main_hidden", value=default_text, height=80, key=f"m_{current_id}", label_visibility="collapsed")
-
-        st.markdown("---")
-
-        with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
-            st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
-            
-            session_key = f"remix_{current_id}"
-            st.button("Parse & Replace", on_click=batch_parse_callback, args=(session_key, current_id))
-            
-            if st.session_state.get("_parse_success"):
-                st.success(f"Updated {st.session_state['_parsed_count']} items!")
-                st.session_state["_parse_success"] = False
-            if st.session_state.get("_parse_error"):
-                st.warning("No valid prompts found.")
-                st.session_state["_parse_error"] = False
-
-        st.markdown("#### 🎨 Remix Suggestions")
-        if session_key not in st.session_state:
-            st.session_state[session_key] = [get_random_remix() for _ in range(3)]
-        current_remixes = st.session_state[session_key]
-
-        with st.expander("Show Instruction"):
-            st.code(COPILOT_GEN_INSTRUCTION, language="text")
-
-        for i in range(3):
-            with st.container(border=True):
-                c_t, c_b = st.columns([5, 1])
-                with c_t:
-                    l_key = f"l_{current_id}_{i}"
-                    if l_key not in st.session_state: st.session_state[l_key] = current_remixes[i]['label']
-                    l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
-                with c_b:
-                    st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id))
-
-                p_key = f"p_{current_id}_{i}"
-                if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
-                p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
-
-                if current_remixes[i]['label'] != l_val: current_remixes[i]['label'] = l_val
-                if current_remixes[i]['prompt'] != p_val: current_remixes[i]['prompt'] = p_val
-
-                if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
-                    clean = urllib.parse.quote(p_val)
-                    seed = random.randint(0, 9999)
-                    url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=600&height=600&nologo=true"
-                    st.session_state[f"poll_img_{current_id}_{i}"] = url
-                
-                if f"poll_img_{current_id}_{i}" in st.session_state:
-                    st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
-
-        st.markdown('</div>', unsafe_allow_html=True) # End scrollable
-
-        st.markdown("---")
-        with st.expander("⚙️ Download Data", expanded=False):
-            if done > 0:
-                zip_buffer = create_final_zip(st.session_state.processed_results, st.session_state.images)
-                st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
-            else:
-                st.info("Process at least one image to download.")
+            if ext_ppt:
+                if st.button("🚀 Extract & Zip", type="primary", use_container_width=True):
+                    with st.spinner("Extracting..."):
+                        zip_buf, count = extract_images_from_ppt(ext_ppt, ext_start)
+                        if zip_buf:
+                            st.success(f"Extracted {count} images!")
+                            st.download_button("⬇️ Download Images ZIP", data=zip_buf.getvalue(), file_name="images_extracted.zip", mime="application/zip", type="primary", use_container_width=True)
+                        else:
+                            st.error(f"Error: {count}")
