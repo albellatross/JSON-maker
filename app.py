@@ -9,7 +9,7 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS =================
+# ================= 🎨 1. DESIGN TOKENS & CSS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0", 
     "surface_color": "rgba(255, 255, 255, 0.90)", 
@@ -32,13 +32,13 @@ def inject_layout_css(tokens):
             padding-bottom: 2rem !important;
             padding-left: 1.5rem !important;
             padding-right: 1.5rem !important;
-            max-width: 98% !important;
+            max-width: 100% !important;
             margin-top: 0 !important;
         }}
         
         h1, h2, h3, h4, p {{ margin-top: 0 !important; padding-top: 0 !important; }}
         
-        /* 左侧面板 */
+        /* === 左侧：图片容器 === */
         .left-panel {{
             height: 88vh; 
             background-color: #EFEBE9; 
@@ -58,32 +58,35 @@ def inject_layout_css(tokens):
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }}
 
-        /* 右侧面板 */
-        .right-scroll-area {{
-            height: 88vh;
-            overflow-y: auto;
-            padding-right: 8px;
-            padding-left: 2px;
-            padding-bottom: 20px;
+        /* === 🔥 核心修复：精准定位右侧栏 === */
+        /* 解释：找到包含正好 2 列的水平布局，选中其中的第 2 列 */
+        [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(2):last-child) > [data-testid="stColumn"]:nth-child(2) > [data-testid="stVerticalBlock"] {{
+            height: 88vh !important;
+            overflow-y: auto !important;
+            padding-right: 12px;
+            padding-left: 5px;
+            padding-bottom: 40px;
+            display: block !important;
         }}
-        .right-scroll-area::-webkit-scrollbar {{ width: 6px; }}
-        .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
+        
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+        ::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
 
-        /* 卡片样式 (紧凑版) */
+        /* 卡片样式 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
-            padding: 0.8rem !important; /* 更紧凑的内边距 */
+            padding: 1rem;
             box-shadow: {tokens['shadow_tinted']};
             border: 1px solid rgba(255,255,255,0.6);
             margin-bottom: 0.5rem;
         }}
         
-        /* 输入框极简 */
-        .stTextArea textarea {{ font-size: 12px; min-height: 60px; }}
-        .stTextInput input {{ font-size: 12px; padding: 0.3rem; }}
+        .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
+        .stTextInput input {{ font-size: 13px; }}
         
-        .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; font-size: 12px !important; }}
+        .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; }}
         div[data-testid="stButton"] > button[kind="primary"] {{ 
             background-color: {tokens['accent_color']} !important; 
             color: #FFFFFF !important; 
@@ -97,7 +100,7 @@ def inject_layout_css(tokens):
         img {{ border-radius: 8px !important; }}
         .css-1v0mbdj a {{ display: none; }}
         .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
-        .element-container {{ margin-bottom: 0.3rem !important; }}
+        .element-container {{ margin-bottom: 0.5rem !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -344,7 +347,6 @@ with tab_main:
         current_id = item['id']
         img_name = item['image_filename']
 
-        # 布局：左侧 45%，右侧 55%
         col_left, col_right = st.columns([1.2, 1.5], gap="medium")
 
         # === LEFT ===
@@ -389,9 +391,7 @@ with tab_main:
                         zip_buffer = create_final_zip(export_data, st.session_state.images)
                         st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
 
-            st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
-
-            # 2. Main Prompt
+            # 🔥 删除空 div，直接开始内容
             st.markdown("#### 📝 Main Prompt")
             default_text = item['original_prompt_text']
             if not default_text.strip().lower().startswith("create"):
@@ -400,7 +400,7 @@ with tab_main:
 
             st.markdown("---")
 
-            # 3. Batch Paste
+            # Batch Paste
             with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
                 st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
                 session_key = f"remix_{current_id}"
@@ -412,41 +412,37 @@ with tab_main:
                     st.warning("No valid prompts found.")
                     st.session_state["_parse_error"] = False
 
-            # 4. Remix Cards (Horizontal Layout)
+            # Remix Cards
             st.markdown("#### 🎨 Remix Suggestions")
             if session_key not in st.session_state:
                 st.session_state[session_key] = [get_random_remix() for _ in range(3)]
             current_remixes = st.session_state[session_key]
 
-            # 🔥 核心修改：使用 3 列并排显示卡片
-            r_cols = st.columns(3)
-            for i, col in enumerate(r_cols):
-                with col:
-                    with st.container(border=True):
-                        # Title
+            for i in range(3):
+                with st.container(border=True):
+                    c_t, c_b = st.columns([5, 1])
+                    with c_t:
                         l_key = f"l_{current_id}_{i}"
                         if l_key not in st.session_state: st.session_state[l_key] = current_remixes[i]['label']
                         l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
-                        
-                        # Dice Button (Small)
-                        st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id), use_container_width=True)
+                    with c_b:
+                        st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id))
 
-                        # Prompt
-                        p_key = f"p_{current_id}_{i}"
-                        if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
-                        p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
+                    p_key = f"p_{current_id}_{i}"
+                    if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
+                    p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
 
-                        # Verify Button
-                        if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
-                            clean = urllib.parse.quote(p_val)
-                            seed = random.randint(0, 9999)
-                            url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=400&height=400&nologo=true"
-                            st.session_state[f"poll_img_{current_id}_{i}"] = url
-                        
-                        if f"poll_img_{current_id}_{i}" in st.session_state:
-                            st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
+                    if current_remixes[i]['label'] != l_val: current_remixes[i]['label'] = l_val
+                    if current_remixes[i]['prompt'] != p_val: current_remixes[i]['prompt'] = p_val
 
-            st.markdown('</div>', unsafe_allow_html=True) # End scrollable
+                    if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
+                        clean = urllib.parse.quote(p_val)
+                        seed = random.randint(0, 9999)
+                        url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=600&height=600&nologo=true"
+                        st.session_state[f"poll_img_{current_id}_{i}"] = url
+                    
+                    if f"poll_img_{current_id}_{i}" in st.session_state:
+                        st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
 
             # Bottom Bar
             st.markdown("<br>", unsafe_allow_html=True)
