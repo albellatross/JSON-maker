@@ -9,7 +9,7 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS & CSS =================
+# ================= 🎨 1. DESIGN TOKENS & ADAPTIVE CSS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0", 
     "surface_color": "rgba(255, 255, 255, 0.90)", 
@@ -25,62 +25,66 @@ def inject_layout_css(tokens):
     css = f"""
     <style>
         .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
+        
+        /* 隐藏顶部 Header */
         header, [data-testid="stHeader"] {{ display: none !important; }}
         
+        /* 移除页面 padding */
         .block-container {{
-            padding-top: 1rem !important;
-            padding-bottom: 2rem !important;
-            padding-left: 1.5rem !important;
-            padding-right: 1.5rem !important;
+            padding: 1rem 1.5rem !important;
             max-width: 100% !important;
-            margin-top: 0 !important;
         }}
         
         h1, h2, h3, h4, p {{ margin-top: 0 !important; padding-top: 0 !important; }}
         
-        /* === 左侧：图片容器 === */
-        .left-panel {{
-            height: 88vh; 
-            background-color: #EFEBE9; 
-            border-radius: 12px;
+        /* =================================================================
+           🔥 核心布局魔法：精准定位两栏结构
+           Target: 第二个 HorizontalBlock (第一个是顶部控制栏，第二个是主内容)
+        ================================================================= */
+        
+        /* 左侧列 (Image) */
+        [data-testid="stHorizontalBlock"]:nth-of-type(2) [data-testid="column"]:nth-of-type(1) > div {{
+            height: calc(100vh - 120px) !important; /* 自适应高度 */
+            background-color: #EFEBE9;
+            border-radius: 16px;
             display: flex;
             justify-content: center;
             align_items: center;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.05);
         }}
-        .left-panel img {{
+        
+        /* 右侧列 (Editor) */
+        [data-testid="stHorizontalBlock"]:nth-of-type(2) [data-testid="column"]:nth-of-type(2) > div {{
+            height: calc(100vh - 120px) !important; /* 强制与左侧等高 */
+            overflow-y: auto !important;             /* 内部独立滚动 */
+            display: block;
+            padding-right: 10px;
+            padding-bottom: 20px;
+        }}
+
+        /* 左侧图片样式 */
+        .fixed-img-container img {{
             max-width: 98%;
             max-height: 98%;
             width: auto;
             height: auto;
-            object-fit: contain; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            object-fit: contain;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            border-radius: 8px;
         }}
 
-        /* === 🔥 核心修复：精准定位右侧栏 === */
-        /* 解释：找到包含正好 2 列的水平布局，选中其中的第 2 列 */
-        [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(2):last-child) > [data-testid="stColumn"]:nth-child(2) > [data-testid="stVerticalBlock"] {{
-            height: 88vh !important;
-            overflow-y: auto !important;
-            padding-right: 12px;
-            padding-left: 5px;
-            padding-bottom: 40px;
-            display: block !important;
-        }}
-        
-        /* 滚动条美化 */
-        ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+        /* 美化右侧滚动条 */
+        ::-webkit-scrollbar {{ width: 6px; }}
         ::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
 
         /* 卡片样式 */
-        [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
+        [data-testid="stVerticalBlock"] [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
             padding: 1rem;
             box-shadow: {tokens['shadow_tinted']};
             border: 1px solid rgba(255,255,255,0.6);
-            margin-bottom: 0.5rem;
         }}
         
         .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
@@ -94,12 +98,7 @@ def inject_layout_css(tokens):
             width: 100%;
         }}
         
-        /* Tab 样式 */
-        .stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); margin-bottom: 1rem; }}
-        
-        img {{ border-radius: 8px !important; }}
         .css-1v0mbdj a {{ display: none; }}
-        .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
         .element-container {{ margin-bottom: 0.5rem !important; }}
     </style>
     """
@@ -281,18 +280,15 @@ def renumber_json_ids(json_file, start_num):
     except Exception as e:
         return None, f"Error: {str(e)}"
 
-# 🔥 NEW: Extract Images Only
 def extract_images_from_ppt(uploaded_file, start_id):
     uploaded_file.seek(0)
     try:
         prs = Presentation(uploaded_file)
     except Exception as e:
         return None, f"Error: {str(e)}"
-    
     zip_buffer = io.BytesIO()
     current_id = int(start_id)
     count = 0
-    
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         for slide in prs.slides:
             for shape in slide.shapes:
@@ -302,17 +298,15 @@ def extract_images_from_ppt(uploaded_file, start_id):
                     zip_file.writestr(img_name, img_bytes)
                     current_id += 1
                     count += 1
-                    
     return zip_buffer, count
 
 # ================= 3. MAIN UI =================
 st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
 inject_layout_css(MY_DESIGN_TOKENS)
 
-# Tabs
 tab_main, tab_fix, tab_extract = st.tabs(["🧶 Remix Editor", "🔢 JSON ID Fixer", "🖼️ PPT Image Extractor"])
 
-# ================= TAB 1: REMIX EDITOR =================
+# ================= TAB 1: EDITOR =================
 with tab_main:
     if 'data' not in st.session_state: st.session_state.data = []
     if 'images' not in st.session_state: st.session_state.images = {}
@@ -347,51 +341,49 @@ with tab_main:
         current_id = item['id']
         img_name = item['image_filename']
 
+        # 1. Top Bar
+        c_top1, c_top2 = st.columns([3, 1])
+        with c_top1:
+            total = len(st.session_state.data)
+            done = len(st.session_state.processed_results)
+            st.progress(done / total if total > 0 else 0)
+            st.caption(f"Progress: {done} / {total} (ID: {current_id})")
+        
+        with c_top2:
+            with st.popover("⚙️ Export"):
+                if done >= 0:
+                    export_data = st.session_state.processed_results.copy()
+                    curr_main = st.session_state.get(f"m_{current_id}", "")
+                    curr_remixes = []
+                    session_key = f"remix_{current_id}"
+                    if session_key in st.session_state:
+                        raw_remixes = st.session_state[session_key]
+                        for idx in range(len(raw_remixes)):
+                            l_val = st.session_state.get(f"l_{current_id}_{idx}", raw_remixes[idx]['label'])
+                            p_val = st.session_state.get(f"p_{current_id}_{idx}", raw_remixes[idx]['prompt'])
+                            curr_remixes.append({"label": l_val, "prompt": p_val})
+                    export_data[f"{current_id}.json"] = {
+                        "id": current_id,
+                        "prompt": curr_main,
+                        "remixSuggestions": curr_remixes
+                    }
+                    zip_buffer = create_final_zip(export_data, st.session_state.images)
+                    st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
+
+        # 2. Split View (Left 45% / Right 55%)
         col_left, col_right = st.columns([1.2, 1.5], gap="medium")
 
         # === LEFT ===
         with col_left:
-            st.markdown(f"#### ID {current_id}")
             if img_name in st.session_state.images:
                 b64_img = base64.b64encode(st.session_state.images[img_name]).decode()
-                st.markdown(f"""<div class="left-panel"><img src="data:image/png;base64,{b64_img}" /></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="fixed-img-container left-panel"><img src="data:image/png;base64,{b64_img}" /></div>""", unsafe_allow_html=True)
             else:
                 st.error("Image missing")
 
-        # === RIGHT ===
+        # === RIGHT (Scrollable) ===
         with col_right:
-            # 1. Top Bar
-            c_top1, c_top2 = st.columns([3, 1])
-            with c_top1:
-                total = len(st.session_state.data)
-                done = len(st.session_state.processed_results)
-                st.progress(done / total if total > 0 else 0)
-                st.caption(f"Progress: {done} / {total}")
-            
-            with c_top2:
-                with st.popover("⚙️ Export"):
-                    if done >= 0:
-                        export_data = st.session_state.processed_results.copy()
-                        curr_main = st.session_state.get(f"m_{current_id}", "")
-                        curr_remixes = []
-                        session_key = f"remix_{current_id}"
-                        if session_key in st.session_state:
-                            raw_remixes = st.session_state[session_key]
-                            for idx in range(len(raw_remixes)):
-                                l_val = st.session_state.get(f"l_{current_id}_{idx}", raw_remixes[idx]['label'])
-                                p_val = st.session_state.get(f"p_{current_id}_{idx}", raw_remixes[idx]['prompt'])
-                                curr_remixes.append({"label": l_val, "prompt": p_val})
-                        
-                        export_data[f"{current_id}.json"] = {
-                            "id": current_id,
-                            "prompt": curr_main,
-                            "remixSuggestions": curr_remixes
-                        }
-                        
-                        zip_buffer = create_final_zip(export_data, st.session_state.images)
-                        st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
-
-            # 🔥 删除空 div，直接开始内容
+            # Main Prompt
             st.markdown("#### 📝 Main Prompt")
             default_text = item['original_prompt_text']
             if not default_text.strip().lower().startswith("create"):
@@ -400,7 +392,7 @@ with tab_main:
 
             st.markdown("---")
 
-            # Batch Paste
+            # Paste
             with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
                 st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
                 session_key = f"remix_{current_id}"
@@ -418,31 +410,33 @@ with tab_main:
                 st.session_state[session_key] = [get_random_remix() for _ in range(3)]
             current_remixes = st.session_state[session_key]
 
-            for i in range(3):
-                with st.container(border=True):
-                    c_t, c_b = st.columns([5, 1])
-                    with c_t:
+            # 3 Columns for Cards
+            r_cols = st.columns(3)
+            for i, col in enumerate(r_cols):
+                with col:
+                    with st.container(border=True):
+                        # Title
                         l_key = f"l_{current_id}_{i}"
                         if l_key not in st.session_state: st.session_state[l_key] = current_remixes[i]['label']
                         l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
-                    with c_b:
-                        st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id))
+                        
+                        # Dice
+                        st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id), use_container_width=True)
 
-                    p_key = f"p_{current_id}_{i}"
-                    if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
-                    p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
+                        # Prompt
+                        p_key = f"p_{current_id}_{i}"
+                        if p_key not in st.session_state: st.session_state[p_key] = current_remixes[i]['prompt']
+                        p_val = st.text_area(f"P{i}", value=current_remixes[i]['prompt'], height=80, key=p_key, label_visibility="collapsed", placeholder="Prompt")
 
-                    if current_remixes[i]['label'] != l_val: current_remixes[i]['label'] = l_val
-                    if current_remixes[i]['prompt'] != p_val: current_remixes[i]['prompt'] = p_val
-
-                    if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
-                        clean = urllib.parse.quote(p_val)
-                        seed = random.randint(0, 9999)
-                        url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=600&height=600&nologo=true"
-                        st.session_state[f"poll_img_{current_id}_{i}"] = url
-                    
-                    if f"poll_img_{current_id}_{i}" in st.session_state:
-                        st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
+                        # Verify
+                        if st.button("Verify", key=f"v_{current_id}_{i}", use_container_width=True):
+                            clean = urllib.parse.quote(p_val)
+                            seed = random.randint(0, 9999)
+                            url = f"https://image.pollinations.ai/prompt/{clean}?seed={seed}&width=400&height=400&nologo=true"
+                            st.session_state[f"poll_img_{current_id}_{i}"] = url
+                        
+                        if f"poll_img_{current_id}_{i}" in st.session_state:
+                            st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
 
             # Bottom Bar
             st.markdown("<br>", unsafe_allow_html=True)
@@ -485,7 +479,7 @@ with tab_fix:
                         st.success("IDs updated successfully!")
                         st.download_button("⬇️ Download New JSON", data=new_json_str, file_name="dataset_renumbered.json", mime="application/json", type="primary", use_container_width=True)
 
-# ================= TAB 3: IMAGE EXTRACTOR =================
+# ================= TAB 3: EXTRACTOR =================
 with tab_extract:
     st.markdown("<br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
