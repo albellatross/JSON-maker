@@ -9,7 +9,7 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS & NO-SCROLL CSS =================
+# ================= 🎨 1. DESIGN TOKENS & CSS =================
 MY_DESIGN_TOKENS = {
     "bg_color": "#FFF6F0", 
     "surface_color": "rgba(255, 255, 255, 0.90)", 
@@ -24,20 +24,12 @@ MY_DESIGN_TOKENS = {
 def inject_layout_css(tokens):
     css = f"""
     <style>
-        /* 全局禁止滚动 */
-        .stApp {{ 
-            background-color: {tokens['bg_color']}; 
-            font-family: {tokens['font_family']}; 
-            color: {tokens['text_primary']}; 
-            overflow: hidden !important; 
-        }}
-        
+        .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
         header, [data-testid="stHeader"] {{ display: none !important; }}
         
-        /* 压缩顶部边距，最大化利用空间 */
         .block-container {{
-            padding-top: 0.5rem !important;
-            padding-bottom: 0rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
             padding-left: 1.5rem !important;
             padding-right: 1.5rem !important;
             max-width: 100% !important;
@@ -46,18 +38,13 @@ def inject_layout_css(tokens):
         
         h1, h2, h3, h4, p {{ margin-top: 0 !important; padding-top: 0 !important; }}
         
-        /* Tab 栏紧凑化 */
-        .stTabs [data-baseweb="tab-list"] {{ 
-            gap: 20px; 
-            border-bottom: 1px solid rgba(0,0,0,0.05); 
-            margin-bottom: 0.5rem; 
-            padding-bottom: 0;
-        }}
+        /* Tab 样式 */
+        .stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); margin-bottom: 1rem; }}
+        .stTabs [data-baseweb="tab"] {{ font-weight: 600; color: {tokens['text_primary']}; }}
         
-        /* === 左侧：图片容器 (动态计算高度) === */
-        /* calc(100vh - 180px) 预留给 Tabs 和 TopBar 的空间 */
+        /* 左侧面板 */
         .left-panel {{
-            height: calc(100vh - 180px); 
+            height: 88vh; 
             background-color: #EFEBE9; 
             border-radius: 12px;
             display: flex;
@@ -66,7 +53,6 @@ def inject_layout_css(tokens):
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.05);
         }}
-        
         .left-panel img {{
             max-width: 98%;
             max-height: 98%;
@@ -76,15 +62,14 @@ def inject_layout_css(tokens):
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }}
 
-        /* === 右侧：滚动区域 (动态计算高度) === */
+        /* 右侧面板 */
         .right-scroll-area {{
-            height: calc(100vh - 180px); /* 关键：与左侧等高 */
+            height: 88vh;
             overflow-y: auto;
             padding-right: 12px;
             padding-left: 2px;
-            padding-bottom: 40px;
+            padding-bottom: 20px;
         }}
-        
         .right-scroll-area::-webkit-scrollbar {{ width: 6px; }}
         .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
 
@@ -92,14 +77,14 @@ def inject_layout_css(tokens):
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
             border-radius: {tokens['radius_card']};
-            padding: 0.8rem;
+            padding: 1rem;
             box-shadow: {tokens['shadow_tinted']};
             border: 1px solid rgba(255,255,255,0.6);
             margin-bottom: 0.5rem;
         }}
         
-        .stTextArea textarea {{ font-size: 13px; min-height: 60px; }}
-        .stTextInput input {{ font-size: 13px; padding: 0.4rem; }}
+        .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
+        .stTextInput input {{ font-size: 13px; }}
         
         .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; }}
         div[data-testid="stButton"] > button[kind="primary"] {{ 
@@ -111,8 +96,7 @@ def inject_layout_css(tokens):
         
         img {{ border-radius: 8px !important; }}
         .css-1v0mbdj a {{ display: none; }}
-        .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
-        .element-container {{ margin-bottom: 0.3rem !important; }}
+        .element-container {{ margin-bottom: 0.5rem !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -317,6 +301,7 @@ def extract_images_from_ppt(uploaded_file, start_id):
 st.set_page_config(page_title="Remix Studio", layout="wide", page_icon="🧶")
 inject_layout_css(MY_DESIGN_TOKENS)
 
+# Tabs
 tab_main, tab_fix, tab_extract = st.tabs(["🧶 Remix Editor", "🔢 JSON ID Fixer", "🖼️ PPT Image Extractor"])
 
 # ================= TAB 1: REMIX EDITOR =================
@@ -358,6 +343,7 @@ with tab_main:
 
         # === LEFT ===
         with col_left:
+            st.markdown(f"#### ID {current_id}")
             if img_name in st.session_state.images:
                 b64_img = base64.b64encode(st.session_state.images[img_name]).decode()
                 st.markdown(f"""<div class="left-panel"><img src="data:image/png;base64,{b64_img}" /></div>""", unsafe_allow_html=True)
@@ -366,7 +352,7 @@ with tab_main:
 
         # === RIGHT ===
         with col_right:
-            # 1. Top Bar (Progress & Export)
+            # 1. Top Bar
             c_top1, c_top2 = st.columns([3, 1])
             with c_top1:
                 total = len(st.session_state.data)
@@ -397,13 +383,14 @@ with tab_main:
                         zip_buffer = create_final_zip(export_data, st.session_state.images)
                         st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
 
+            st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
+
+            # 2. Main Prompt (已移除上方的 st.markdown("---"))
             st.markdown("#### 📝 Main Prompt")
             default_text = item['original_prompt_text']
             if not default_text.strip().lower().startswith("create"):
                 default_text = "Create an image of " + default_text
             main_prompt = st.text_area("main_hidden", value=default_text, height=80, key=f"m_{current_id}", label_visibility="collapsed")
-
-            st.markdown("---")
 
             # Batch Paste
             with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
@@ -423,7 +410,6 @@ with tab_main:
                 st.session_state[session_key] = [get_random_remix() for _ in range(3)]
             current_remixes = st.session_state[session_key]
 
-            # Horizontal Cards (3 Columns)
             r_cols = st.columns(3)
             for i, col in enumerate(r_cols):
                 with col:
@@ -451,7 +437,7 @@ with tab_main:
                         if f"poll_img_{current_id}_{i}" in st.session_state:
                             st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
 
-            # End scrollable
+            st.markdown('</div>', unsafe_allow_html=True) # End scrollable
 
             # Bottom Bar
             st.markdown("<br>", unsafe_allow_html=True)
