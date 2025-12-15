@@ -397,8 +397,6 @@ with tab_main:
                         zip_buffer = create_final_zip(export_data, st.session_state.images)
                         st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
 
-            st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
-
             st.markdown("#### 📝 Main Prompt")
             default_text = item['original_prompt_text']
             if not default_text.strip().lower().startswith("create"):
@@ -453,7 +451,7 @@ with tab_main:
                         if f"poll_img_{current_id}_{i}" in st.session_state:
                             st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
 
-            st.markdown('</div>', unsafe_allow_html=True) # End scrollable
+            # End scrollable
 
             # Bottom Bar
             st.markdown("<br>", unsafe_allow_html=True)
