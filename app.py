@@ -140,7 +140,7 @@ Prompt: [Instruction]"""
 
 def get_random_remix(): return random.choice(REMIX_LIST_EN)
 
-# --- Callbacks (Fixed StreamlitAPIException) ---
+# --- Callbacks (Fixing StreamlitAPIException) ---
 
 def randomize_callback(index, session_key_root, current_id_val):
     new_remix = get_random_remix()
@@ -178,6 +178,7 @@ def parse_bulk_remix_text(raw_text):
             else:
                 prompt_text = clean_current
                 processed_indices.add(i)
+                # 向上回溯找标题
                 k = i - 1
                 while k >= 0:
                     prev_line = lines[k].strip()
@@ -205,7 +206,7 @@ def parse_bulk_remix_text(raw_text):
     return parsed_items
 
 def batch_parse_callback(session_key, current_id_val):
-    # 1. 获取文本
+    # 修复：在回调中安全获取和清空
     batch_text = st.session_state.get("batch_input_area", "")
     parsed_items = parse_bulk_remix_text(batch_text)
     
@@ -383,12 +384,11 @@ else:
 
         st.markdown("---")
 
-        # Batch Paste (Callback Enabled)
+        # Paste (Callback Enabled)
         with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
             st.text_area("Paste here", height=100, key="batch_input_area", label_visibility="collapsed", placeholder="Title\nCreate...")
-            session_key = f"remix_{current_id}"
             
-            # 使用回调
+            session_key = f"remix_{current_id}"
             st.button("Parse & Replace", on_click=batch_parse_callback, args=(session_key, current_id))
             
             if st.session_state.get("_parse_success"):
@@ -398,7 +398,6 @@ else:
                 st.warning("No valid prompts found.")
                 st.session_state["_parse_error"] = False
 
-        # Remix Cards
         st.markdown("#### 🎨 Remix Suggestions")
         if session_key not in st.session_state:
             st.session_state[session_key] = [get_random_remix() for _ in range(3)]
