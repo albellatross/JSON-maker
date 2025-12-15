@@ -9,93 +9,173 @@ import urllib.parse
 import re
 import base64
 
-# ================= 🎨 1. DESIGN TOKENS & CSS =================
+# ================= 🎨 1. DESIGN TOKENS & UI CONFIGURATION =================
 MY_DESIGN_TOKENS = {
-    "bg_color": "#FFF6F0", 
-    "surface_color": "rgba(255, 255, 255, 0.90)", 
-    "text_primary": "#311F10",        
-    "accent_color": "#311F10", 
-    "radius_card": "12px",
-    "radius_pill": "999px",
-    "shadow_tinted": "0 2px 8px rgba(210, 150, 120, 0.08)",
-    "font_family": "'Segoe UI', 'Microsoft YaHei', sans-serif"
+    "bg_color": "#FFF8F3",        # 极浅的暖米色背景
+    "surface_color": "#FFFFFF",   # 纯白卡片背景
+    "text_primary": "#311F10",    # 深棕色主文字
+    "text_secondary": "#6B5A50",  # 浅棕色次要文字
+    "accent_color": "#4A3A32",    # 强调色（按钮、激活状态）
+    "accent_hover": "#635147",    # 按钮悬停色
+    "border_color": "#E8DED5",    # 柔和的边框色
+    "font_family": "'Segoe UI', 'Helvetica Neue', sans-serif"
 }
 
 def inject_layout_css(tokens):
     css = f"""
     <style>
-        .stApp {{ background-color: {tokens['bg_color']}; font-family: {tokens['font_family']}; color: {tokens['text_primary']}; }}
-        header, [data-testid="stHeader"] {{ display: none !important; }}
+        /* === 1. 全局布局重置 (No-Scroll Core) === */
+        .stApp {{
+            background-color: {tokens['bg_color']};
+            font-family: {tokens['font_family']};
+            color: {tokens['text_primary']};
+            overflow: hidden !important; /* 禁止整个网页滚动 */
+        }}
         
+        /* 隐藏顶部 Header 和 Footer */
+        header, footer, [data-testid="stHeader"] {{ display: none !important; }}
+        
+        /* 极致压缩页面边距，最大化利用屏幕空间 */
         .block-container {{
             padding-top: 1rem !important;
-            padding-bottom: 2rem !important;
+            padding-bottom: 0 !important;
             padding-left: 1.5rem !important;
             padding-right: 1.5rem !important;
             max-width: 100% !important;
-            margin-top: 0 !important;
+            height: 100vh !important;
+        }}
+
+        h1, h2, h3, h4 {{ margin: 0 !important; padding: 0 !important; color: {tokens['text_primary']} !important; }}
+
+        /* === 2. 顶部菜单 (Tabs) 美化 === */
+        /* Tab 容器 */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 8px;
+            background-color: transparent;
+            padding-bottom: 0;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid {tokens['border_color']};
+        }}
+
+        /* 单个 Tab 按钮 */
+        .stTabs [data-baseweb="tab"] {{
+            height: 40px;
+            white-space: pre-wrap;
+            border-radius: 8px 8px 0 0;
+            color: {tokens['text_secondary']};
+            font-weight: 600;
+            border: none;
+            background-color: transparent;
+            padding: 0 20px;
+            transition: all 0.2s ease;
+        }}
+
+        /* 选中状态的 Tab */
+        .stTabs [aria-selected="true"] {{
+            background-color: {tokens['surface_color']} !important;
+            color: {tokens['accent_color']} !important;
+            border: 1px solid {tokens['border_color']} !important;
+            border-bottom: 1px solid {tokens['surface_color']} !important; /* 遮住底部分割线 */
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
         }}
         
-        h1, h2, h3, h4, p {{ margin-top: 0 !important; padding-top: 0 !important; }}
+        /* 去掉 Tab 选中时的红线 */
+        .stTabs [data-baseweb="tab-highlight"] {{ display: none; }}
+
+        /* === 3. 左右分栏布局 (核心高度控制) === */
         
-        /* Tab 样式 */
-        .stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); margin-bottom: 1rem; }}
-        .stTabs [data-baseweb="tab"] {{ font-weight: 600; color: {tokens['text_primary']}; }}
-        
-        /* 左侧面板 */
+        /* 左侧面板：图片展示区 */
         .left-panel {{
-            height: 88vh; 
-            background-color: #EFEBE9; 
-            border-radius: 12px;
+            /* 动态计算高度：总高 - 顶部Tab高度 - 边距 */
+            height: calc(100vh - 100px); 
+            background-color: #F2EBE6; /* 稍微深一点的背景衬托图片 */
+            border-radius: 16px;
             display: flex;
             justify-content: center;
             align_items: center;
             overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.05);
+            border: 1px solid {tokens['border_color']};
+            position: relative;
         }}
+        
         .left-panel img {{
-            max-width: 98%;
-            max-height: 98%;
+            max-width: 95%;
+            max-height: 95%;
             width: auto;
             height: auto;
-            object-fit: contain; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            object-fit: contain; /* 关键：保持比例不裁切 */
+            filter: drop-shadow(0 8px 16px rgba(0,0,0,0.08));
         }}
 
-        /* 右侧面板 */
+        /* 右侧面板：独立滚动区 */
         .right-scroll-area {{
-            height: 88vh;
-            overflow-y: auto;
-            padding-right: 12px;
-            padding-left: 2px;
-            padding-bottom: 20px;
+            height: calc(100vh - 100px); /* 与左侧等高 */
+            overflow-y: auto; /* 仅允许此处滚动 */
+            padding-right: 10px;
+            padding-left: 5px;
+            padding-bottom: 40px; /* 给底部留点呼吸空间 */
         }}
+        
+        /* 隐藏/美化右侧滚动条 */
         .right-scroll-area::-webkit-scrollbar {{ width: 6px; }}
-        .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #D7CCC8; border-radius: 3px; }}
+        .right-scroll-area::-webkit-scrollbar-track {{ background: transparent; }}
+        .right-scroll-area::-webkit-scrollbar-thumb {{ background-color: #DCCFC6; border-radius: 3px; }}
+        .right-scroll-area::-webkit-scrollbar-thumb:hover {{ background-color: #C4B4A8; }}
 
-        /* 卡片样式 */
+        /* === 4. 组件微调 === */
+        
+        /* 卡片 */
         [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {{
             background-color: {tokens['surface_color']};
-            border-radius: {tokens['radius_card']};
-            padding: 1rem;
-            box-shadow: {tokens['shadow_tinted']};
-            border: 1px solid rgba(255,255,255,0.6);
-            margin-bottom: 0.5rem;
+            border-radius: 12px;
+            padding: 1.2rem;
+            border: 1px solid {tokens['border_color']};
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            gap: 0.8rem;
+        }}
+
+        /* 输入框 */
+        .stTextArea textarea, .stTextInput input {{
+            font-size: 13px;
+            border-radius: 8px;
+            border: 1px solid {tokens['border_color']};
+            background-color: #FAFAFA;
+        }}
+        .stTextArea textarea:focus, .stTextInput input:focus {{
+            border-color: {tokens['accent_color']};
+            box-shadow: 0 0 0 1px {tokens['accent_color']};
+        }}
+
+        /* 按钮 */
+        .stButton button {{
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            transition: all 0.2s;
         }}
         
-        .stTextArea textarea {{ font-size: 13px; min-height: 80px; }}
-        .stTextInput input {{ font-size: 13px; }}
-        
-        .stButton button {{ border-radius: {tokens['radius_pill']} !important; font-weight: 600 !important; }}
+        /* 主按钮 (Primary) */
         div[data-testid="stButton"] > button[kind="primary"] {{ 
             background-color: {tokens['accent_color']} !important; 
             color: #FFFFFF !important; 
             border: none !important;
-            width: 100%;
+            padding: 0.5rem 1rem;
         }}
-        
+        div[data-testid="stButton"] > button[kind="primary"]:hover {{ 
+            background-color: {tokens['accent_hover']} !important;
+            box-shadow: 0 4px 12px rgba(74, 58, 50, 0.2);
+        }}
+
+        /* 图片圆角 */
         img {{ border-radius: 8px !important; }}
+        
+        /* 隐藏链接图标 */
         .css-1v0mbdj a {{ display: none; }}
+        
+        /* 进度条 */
+        .stProgress > div > div > div > div {{ background-color: {tokens['accent_color']}; }}
+        
+        /* 修正 Streamlit 默认的 margin */
         .element-container {{ margin-bottom: 0.5rem !important; }}
     </style>
     """
@@ -130,12 +210,6 @@ REMIX_LIST_EN = [
     {"label": "Make this mechanical?", "prompt": "Create a mechanical version of the subject with exposed gears, metallic joints, and precise components."},
     {"label": "Make this crystal?", "prompt": "Remake this image to be in an iridescent fantasy realm with the subject as translucent glass or crystal, glowing and refracted."}
 ]
-
-COPILOT_GEN_INSTRUCTION = """A remix prompt consists of a short, 2–5-word title and an instruction.
-Please write 5 remix prompts for me based on the uploaded image.
-Format:
-Label: [Title]
-Prompt: [Instruction]"""
 
 def get_random_remix(): return random.choice(REMIX_LIST_EN)
 
@@ -339,20 +413,25 @@ with tab_main:
         current_id = item['id']
         img_name = item['image_filename']
 
+        # 布局：左侧 45%，右侧 55%
         col_left, col_right = st.columns([1.2, 1.5], gap="medium")
 
-        # === LEFT ===
+        # === LEFT (Image Panel) ===
         with col_left:
             st.markdown(f"#### ID {current_id}")
             if img_name in st.session_state.images:
                 b64_img = base64.b64encode(st.session_state.images[img_name]).decode()
-                st.markdown(f"""<div class="left-panel"><img src="data:image/png;base64,{b64_img}" /></div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="left-panel">
+                    <img src="data:image/png;base64,{b64_img}" />
+                </div>
+                """, unsafe_allow_html=True)
             else:
                 st.error("Image missing")
 
-        # === RIGHT ===
+        # === RIGHT (Editor Panel) ===
         with col_right:
-            # 1. Top Bar
+            # 1. Top Bar: Progress & Export
             c_top1, c_top2 = st.columns([3, 1])
             with c_top1:
                 total = len(st.session_state.data)
@@ -383,13 +462,17 @@ with tab_main:
                         zip_buffer = create_final_zip(export_data, st.session_state.images)
                         st.download_button("⬇️ Download ZIP", data=zip_buffer.getvalue(), file_name="dataset.zip", mime="application/zip", type="primary", use_container_width=True)
 
+            # 2. Scrollable Area
+            st.markdown('<div class="right-scroll-area">', unsafe_allow_html=True)
 
-            # 2. Main Prompt (已移除上方的 st.markdown("---"))
+            # Main Prompt
             st.markdown("#### 📝 Main Prompt")
             default_text = item['original_prompt_text']
             if not default_text.strip().lower().startswith("create"):
                 default_text = "Create an image of " + default_text
             main_prompt = st.text_area("main_hidden", value=default_text, height=80, key=f"m_{current_id}", label_visibility="collapsed")
+
+            st.markdown("---")
 
             # Batch Paste
             with st.expander("📋 Paste Remix Text (Replace)", expanded=False):
@@ -409,6 +492,7 @@ with tab_main:
                 st.session_state[session_key] = [get_random_remix() for _ in range(3)]
             current_remixes = st.session_state[session_key]
 
+            # Horizontal Cards (3 Columns)
             r_cols = st.columns(3)
             for i, col in enumerate(r_cols):
                 with col:
@@ -418,7 +502,7 @@ with tab_main:
                         if l_key not in st.session_state: st.session_state[l_key] = current_remixes[i]['label']
                         l_val = st.text_input(f"L{i}", value=current_remixes[i]['label'], key=l_key, label_visibility="collapsed", placeholder="Label")
                         
-                        # Dice
+                        # Dice (Full width in card)
                         st.button("🎲", key=f"rnd_{current_id}_{i}", on_click=randomize_callback, args=(i, session_key, current_id), use_container_width=True)
 
                         # Prompt
@@ -436,9 +520,9 @@ with tab_main:
                         if f"poll_img_{current_id}_{i}" in st.session_state:
                             st.image(st.session_state[f"poll_img_{current_id}_{i}"], use_container_width=True)
 
-            # End scrollable
+            st.markdown('</div>', unsafe_allow_html=True) # End scrollable
 
-            # Bottom Bar
+            # Bottom Bar (Outside scroll)
             st.markdown("<br>", unsafe_allow_html=True)
             b_col1, b_col2 = st.columns([1, 4])
             with b_col1:
