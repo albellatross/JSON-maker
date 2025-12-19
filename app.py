@@ -213,7 +213,7 @@ def batch_parse_callback(session_key, current_id_val):
 # --- File Operations ---
 
 def process_ppt_file(uploaded_file, start_id):
-    uploaded_file.seek(0)
+    uploaded_file.seek(0) # 关键：重置文件指针
     try:
         prs = Presentation(uploaded_file)
     except zipfile.BadZipFile:
@@ -224,22 +224,54 @@ def process_ppt_file(uploaded_file, start_id):
     current_id = int(start_id)
     extracted_data = []
     image_storage = {}
+    
     for index, slide in enumerate(prs.slides):
         slide_info = {"id": str(current_id), "original_prompt_text": "", "image_filename": ""}
         found_image = False
+        
+        # === 核心修改：更强力的图片查找逻辑 ===
+        # 它可以识别：普通图片、图片占位符
+        
+        # 1. 优先寻找图片
+        target_shape = None
+        
+        # 遍历形状寻找图片
         for shape in slide.shapes:
-            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE and not found_image:
+            # A. 检查是否是普通图片
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                target_shape = shape
+                break # 每个 Slide 只取第一张图
+            
+            # B. 检查是否是占位符且包含图片 (关键修复!)
+            elif shape.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER:
+                if hasattr(shape, "image") and shape.image:
+                    target_shape = shape
+                    break
+        
+        # 如果找到了图片形状，提取数据
+        if target_shape:
+            try:
+                img_bytes = target_shape.image.blob
                 img_name = f"{current_id}.png"
-                image_storage[img_name] = shape.image.blob
+                image_storage[img_name] = img_bytes
                 slide_info["image_filename"] = img_name
                 found_image = True
+            except Exception:
+                pass # 如果图片数据损坏，跳过
+
+        # 2. 提取文字 (逻辑保持不变，但增加鲁棒性)
+        for shape in slide.shapes:
             if shape.has_text_frame:
                 text = shape.text.strip()
-                if len(text) > 10 and len(text) > len(slide_info["original_prompt_text"]):
+                # 只有当文字长度足够，且比当前已提取的文字更长时才更新
+                if len(text) > 5 and len(text) > len(slide_info["original_prompt_text"]):
                     slide_info["original_prompt_text"] = text
+
+        # 只有当确实找到了图片时，才算作有效 Slide
         if found_image:
             extracted_data.append(slide_info)
             current_id += 1
+            
     return extracted_data, image_storage
 
 def create_final_zip(processed_jsons, image_storage):
